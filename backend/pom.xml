@@ -8,7 +8,7 @@
 		<version>4.1.0</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
-	<groupId>com.pricedrop</groupId>
+	<groupId>com.pricechangealert</groupId>
 	<artifactId>price-change-alert</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>price-change-alert</name>
@@ -118,3 +118,4 @@
 	</build>
 
 </project>
+
