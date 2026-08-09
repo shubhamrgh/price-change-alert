@@ -1,0 +1,7 @@
+.git
+.gitignore
+**/node_modules
+**/target
+backend/data
+backend/application-local.properties
+*.log
