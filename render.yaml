@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: price-change-alert
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: prod
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_SSLMODE
+        value: require
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: PRICE_CHANGE_ALERT_VAPID_PUBLIC_KEY
+        sync: false
+      - key: PRICE_CHANGE_ALERT_VAPID_PRIVATE_KEY
+        sync: false
+      - key: PRICE_CHANGE_ALERT_VAPID_SUBJECT
+        value: mailto:alerts@price-change-alert.app
+      - key: PRICE_CHANGE_ALERT_BASE_URL
+        sync: false

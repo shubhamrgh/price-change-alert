@@ -23,7 +23,7 @@ Crypto is quoted in USD (stocks in INR). NSE/BSE direct endpoints
 (nseindia.com / api.bseindia.com) were tried and removed: they are bot-blocked
 or unstable, so stocks use Yahoo Finance directly. Yahoo's unofficial chart API
 can throttle at high poll rates — keep the watchlist small or raise
-`pricedrop.poll.interval-ms`.
+`price-change-alert.poll.interval-ms`.
 
 ## Run it
 
@@ -32,7 +32,7 @@ Backend (serves the built PWA too):
 ```
 cd backend
 mvnw package -DskipTests            (first run downloads Maven)
-java -jar target\pricedrop-0.0.1-SNAPSHOT.jar
+java -jar target\price-change-alert-0.0.1-SNAPSHOT.jar
 ```
 
 App: http://localhost:8080  (API on the same server)
@@ -59,8 +59,8 @@ mvnw.cmd package
 
 | Key | Meaning |
 |-----|---------|
-| `pricedrop.poll.interval-ms` | alert engine poll cadence (default 30000) |
-| `PRICEDROP_VAPID_PUBLIC_KEY` / `PRICEDROP_VAPID_PRIVATE_KEY` | Web Push keys; required for notifications in production |
+| `price-change-alert.poll.interval-ms` | alert engine poll cadence (default 30000) |
+| `PRICE_CHANGE_ALERT_VAPID_PUBLIC_KEY` / `PRICE_CHANGE_ALERT_VAPID_PRIVATE_KEY` | Web Push keys; required for notifications in production |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Production PostgreSQL connection |
 
 Local-only VAPID values belong in `backend/application-local.properties`, which is excluded from Git and Docker builds.
@@ -122,10 +122,10 @@ Steps (Render, ~10 min):
 
 1. Push this repo to GitHub (git init, add, commit, push).
 2. On Render: New -> Web Service -> connect the repo -> pick the `Dockerfile`/render.yaml.
-3. Deploy. Your URL `https://pricedrop.onrender.com` gets HTTPS automatically.
+3. Deploy. Your URL `https://price-change-alert.onrender.com` gets HTTPS automatically.
 4. Open it on your phone, Add to Home screen, allow notifications -> done.
 
-Local Docker build check: `docker build -t pricedrop .` (`render.yaml` + `Dockerfile` included).
+Local Docker build check: `docker build -t price-change-alert .` (`render.yaml` + `Dockerfile` included).
 
 ## Phase 2 ideas
 
