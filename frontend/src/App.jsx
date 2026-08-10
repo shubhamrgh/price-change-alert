@@ -66,6 +66,35 @@ function MarketIcon({ market, className = '' }) {
   )
 }
 
+function AssetLogo({ market, symbol, className = '' }) {
+  const [loaded, setLoaded] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const normalizedSymbol = (symbol || '').trim().toUpperCase()
+  const source = market === 'CRYPTO'
+    ? `https://assets.coincap.io/assets/icons/${normalizedSymbol.toLowerCase()}@2x.png`
+    : `/api/logo?market=${encodeURIComponent(market)}&symbol=${encodeURIComponent(normalizedSymbol)}`
+
+  useEffect(() => {
+    setLoaded(false)
+    setFailed(false)
+  }, [market, normalizedSymbol])
+
+  return (
+    <span className={`asset-logo ${className}`} aria-hidden="true">
+      <MarketIcon market={market} />
+      {!failed && normalizedSymbol && (
+        <img
+          src={source}
+          alt=""
+          className={loaded ? 'is-loaded' : ''}
+          onLoad={() => setLoaded(true)}
+          onError={() => { setFailed(true); setLoaded(false) }}
+        />
+      )}
+    </span>
+  )
+}
+
 async function api(path, options = {}) {
   const res = await fetch(path, {
     ...options,
@@ -366,7 +395,7 @@ function AddForm({ onAdded }) {
             {searching && <li className="suggest-status">Searching {market === 'CRYPTO' ? 'coins' : 'stocks'}...</li>}
             {!searching && suggestions.map((s, i) => (
               <li key={`${s.symbol}-${i}`} onMouseDown={() => pick(s)}>
-                <MarketIcon market={s.market || market} className="suggest-icon" />
+                <AssetLogo market={s.market || market} symbol={s.symbol} className="suggest-icon" />
                 <span className="suggest-copy">
                   <span className="s-sym">{s.symbol}</span>
                   <span className="s-name">{s.name}</span>
@@ -380,7 +409,7 @@ function AddForm({ onAdded }) {
       {quoteLoading && <div className="hint">Fetching live price...</div>}
       {preview && (
         <div className="preview">
-          <span className="dot" />
+          <AssetLogo market={market} symbol={preview.symbol} className="preview-logo" />
           <span className="pv-name">{preview.displayName || preview.symbol}</span>
           <strong>{fmtPrice(preview.price, preview.currency)}</strong>
           <span className="src-badge">{preview.source}</span>
@@ -429,7 +458,7 @@ function WatchCard({ item, onDelete, onToggle }) {
     <li className={`card watch-card ${!item.active ? 'paused' : ''}`}>
       <button className="card-main" onClick={() => setExpanded((v) => !v)}>
         <div className="item-top">
-          <MarketIcon market={item.market} className="watch-market-icon" />
+          <AssetLogo market={item.market} symbol={item.symbol} className="watch-market-icon" />
           <span className="mk">{item.market}</span>
           <div className="sym-col">
             <strong className="sym">{item.symbol}</strong>
@@ -570,6 +599,7 @@ function AlertList({ alerts, onDelete, onClearAll }) {
         {alerts.map((a) => (
           <li key={a.id} className="card alert-item">
             <div className="alert-top">
+              <AssetLogo market={a.market} symbol={a.symbol} className="alert-logo" />
               <span className="badge">{a.market}</span>
               <strong>{a.symbol}</strong>
               <button className="x" onClick={() => onDelete(a.id)} aria-label="Delete alert">×</button>

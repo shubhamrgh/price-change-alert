@@ -199,8 +199,22 @@ input:focus, select.threshold:focus { border-color: var(--accent); }
 .market-icon { width: 22px; height: 22px; flex: 0 0 22px; display: inline-grid; place-items: center; color: var(--up); }
 .market-icon.crypto { color: var(--accent); }
 .market-icon svg { width: 100%; height: 100%; display: block; }
+.asset-logo {
+  width: 26px; height: 26px; flex: 0 0 26px;
+  position: relative; display: inline-grid; place-items: center;
+  border: 1px solid var(--border-strong); border-radius: 50%;
+  background: var(--card-2); overflow: hidden;
+}
+.asset-logo > .market-icon { width: 72%; height: 72%; }
+.asset-logo img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  padding: 2px; object-fit: contain; border-radius: 50%;
+  background: var(--card-2); opacity: 0; transition: opacity 0.15s ease;
+}
+.asset-logo img.is-loaded { opacity: 1; }
 .suggest-icon { width: 20px; height: 20px; flex-basis: 20px; }
 .watch-market-icon { width: 24px; height: 24px; flex-basis: 24px; }
+.alert-logo { width: 24px; height: 24px; flex-basis: 24px; }
 
 .hint { font-size: 0.78rem; color: var(--muted); }
 .preview {
@@ -210,7 +224,7 @@ input:focus, select.threshold:focus { border-color: var(--accent); }
   border: 1px solid color-mix(in srgb, var(--up) 28%, transparent);
   font-size: 0.85rem;
 }
-.preview .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--up); }
+.preview-logo { width: 24px; height: 24px; flex-basis: 24px; }
 .preview .pv-name { color: var(--muted); }
 .preview strong { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
 .preview .src-badge { margin-left: auto; }
