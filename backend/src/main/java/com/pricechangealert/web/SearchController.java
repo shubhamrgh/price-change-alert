@@ -3,7 +3,10 @@ package com.pricechangealert.web;
 import com.pricechangealert.model.Market;
 import com.pricechangealert.model.Suggestion;
 import com.pricechangealert.service.SearchService;
+import java.time.Duration;
 import java.util.List;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -21,7 +24,11 @@ public class SearchController {
     }
 
     @GetMapping
-    public List<Suggestion> search(@RequestParam String q, @RequestParam Market market) {
-        return searchService.search(q, market);
+    public ResponseEntity<List<Suggestion>> search(@RequestParam String q, @RequestParam Market market) {
+        List<Suggestion> suggestions = searchService.search(q, market);
+        Duration maxAge = suggestions.isEmpty() ? Duration.ofSeconds(30) : Duration.ofMinutes(10);
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.maxAge(maxAge).cachePublic())
+                .body(suggestions);
     }
 }

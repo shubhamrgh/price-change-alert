@@ -1,47 +1,35 @@
 package com.pricechangealert.service;
 
+import com.pricechangealert.cache.ApplicationCaches;
+import com.pricechangealert.cache.ApplicationCaches.ChartKey;
 import com.pricechangealert.model.Chart;
 import com.pricechangealert.model.Market;
 import com.pricechangealert.source.CoinGeckoProvider;
 import com.pricechangealert.source.YahooProvider;
-import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Service;
 
-/** History for the chart endpoint: crypto from CoinGecko, stocks from Yahoo; cached ~5 min. */
+/** History for the chart endpoint: crypto from CoinGecko, stocks from Yahoo. */
 @Service
 public class ChartService {
 
-    private record CacheKey(String symbol, Market market, int days, String currency) {
-    }
-
-    private static final long TTL_MS = 5 * 60 * 1000;
-
     private final CoinGeckoProvider coinGecko;
     private final YahooProvider yahoo;
-    private final Map<CacheKey, Cached> cache = new ConcurrentHashMap<>();
+    private final ApplicationCaches caches;
 
-    private record Cached(Chart chart, long fetchedAt) {
-    }
-
-    public ChartService(CoinGeckoProvider coinGecko, YahooProvider yahoo) {
+    public ChartService(CoinGeckoProvider coinGecko, YahooProvider yahoo, ApplicationCaches caches) {
         this.coinGecko = coinGecko;
         this.yahoo = yahoo;
+        this.caches = caches;
     }
 
     public Optional<Chart> chart(String symbol, Market market, int days, String currency) {
-        String cur = currency == null || currency.isBlank() ? "inr" : currency.trim().toLowerCase();
-        CacheKey key = new CacheKey(symbol.trim().toUpperCase(), market, days, cur);
-        Cached hit = cache.get(key);
-        if (hit != null && System.currentTimeMillis() - hit.fetchedAt() < TTL_MS) {
-            return Optional.of(hit.chart());
-        }
-        Optional<Chart> built = build(symbol, market, days, cur);
-        built.ifPresent(c -> cache.put(key, new Cached(c, System.currentTimeMillis())));
-        return built;
+        if (market == null || symbol == null || symbol.isBlank()) return Optional.empty();
+        int boundedDays = Math.max(1, Math.min(days, 365));
+        ChartKey key = new ChartKey(market, symbol, boundedDays, currency);
+        return caches.chart(key,
+                () -> build(key.symbol(), key.market(), key.days(), key.currency()));
     }
 
     private Optional<Chart> build(String symbol, Market market, int days, String currency) {

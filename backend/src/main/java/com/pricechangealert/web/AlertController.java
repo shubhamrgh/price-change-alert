@@ -3,6 +3,7 @@ package com.pricechangealert.web;
 import com.pricechangealert.model.AlertLog;
 import com.pricechangealert.repository.AlertLogRepository;
 import java.util.List;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,7 +25,7 @@ public class AlertController {
 
     @GetMapping
     public List<AlertLog> recent(@RequestHeader(value = "X-Visitor-Id", required = false) String visitorId) {
-        return repository.findRecentOwnedBy(VisitorId.normalize(visitorId)).stream().limit(50).toList();
+        return repository.findRecentOwnedBy(VisitorId.normalize(visitorId), PageRequest.of(0, 50));
     }
 
     @DeleteMapping("/{id}")

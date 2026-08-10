@@ -121,6 +121,9 @@ export default function App() {
   const [tab, setTab] = useState('watch')
   const [notificationOn, setNotificationOn] = useState(false)
   const [error, setError] = useState('')
+  const refreshEnabled = useRef(false)
+  const refreshRunning = useRef(false)
+  const refreshQueued = useRef(false)
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -135,6 +138,11 @@ export default function App() {
   }, [])
 
   const refresh = useCallback(async () => {
+    if (refreshRunning.current) {
+      refreshQueued.current = true
+      return
+    }
+    refreshRunning.current = true
     setError('')
     try {
       const [w, a] = await Promise.all([api('/api/watchlist'), api('/api/alerts')])
@@ -142,13 +150,31 @@ export default function App() {
       setAlerts(a)
     } catch (e) {
       setError(e.message)
+    } finally {
+      refreshRunning.current = false
+      if (refreshEnabled.current && refreshQueued.current) {
+        refreshQueued.current = false
+        setTimeout(refresh, 0)
+      }
     }
   }, [])
 
   useEffect(() => {
-    refresh()
-    const t = setInterval(refresh, 30000)
-    return () => clearInterval(t)
+    refreshEnabled.current = true
+    const refreshWhenVisible = () => {
+      if (!document.hidden) refresh()
+    }
+    refreshWhenVisible()
+    const timer = setInterval(refreshWhenVisible, 30000)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    window.addEventListener('focus', refreshWhenVisible)
+    return () => {
+      refreshEnabled.current = false
+      refreshQueued.current = false
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+      window.removeEventListener('focus', refreshWhenVisible)
+    }
   }, [refresh])
 
   const togglePush = async () => {
@@ -263,10 +289,13 @@ function AddForm({ onAdded }) {
       return
     }
     let alive = true
+    const controller = new AbortController()
     setSearching(true)
     setSearchMessage('')
     const t = setTimeout(() => {
-      api(`/api/search?q=${encodeURIComponent(q)}&market=${market}`)
+      api(`/api/search?q=${encodeURIComponent(q)}&market=${market}`, {
+        signal: controller.signal,
+      })
         .then((s) => {
           if (!alive) return
           const next = Array.isArray(s) ? s : []
@@ -282,7 +311,12 @@ function AddForm({ onAdded }) {
         })
         .finally(() => alive && setSearching(false))
     }, 250)
-    return () => { alive = false; clearTimeout(t); setSearching(false) }
+    return () => {
+      alive = false
+      controller.abort()
+      clearTimeout(t)
+      setSearching(false)
+    }
   }, [query, market, picked])
 
   const closeSoon = () => {
@@ -412,7 +446,9 @@ function AddForm({ onAdded }) {
           <AssetLogo market={market} symbol={preview.symbol} className="preview-logo" />
           <span className="pv-name">{preview.displayName || preview.symbol}</span>
           <strong>{fmtPrice(preview.price, preview.currency)}</strong>
-          <span className="src-badge">{preview.source}</span>
+          <span className="src-badge">
+            {preview.source}{preview.fetchedAt ? ` · ${timeAgo(preview.fetchedAt)}` : ''}
+          </span>
         </div>
       )}
       <input placeholder="Display name (optional)" value={name} onChange={(e) => setName(e.target.value)} />

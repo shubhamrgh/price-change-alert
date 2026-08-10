@@ -7,12 +7,16 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.time.Instant;
 
 @Entity
-@Table(name = "watch_items")
+@Table(name = "watch_items", indexes = {
+        @Index(name = "idx_watch_items_active", columnList = "active"),
+        @Index(name = "idx_watch_items_owner", columnList = "owner_id")
+})
 public class WatchItem {
 
     @Id

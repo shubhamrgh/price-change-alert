@@ -2,6 +2,8 @@ package com.pricechangealert.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pricechangealert.cache.ApplicationCaches;
+import com.pricechangealert.cache.ApplicationCaches.LogoKey;
 import com.pricechangealert.model.Market;
 import java.net.URI;
 import java.time.Duration;
@@ -9,7 +11,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -20,11 +21,8 @@ public class AssetLogoService {
 
     private static final Duration TIMEOUT = Duration.ofSeconds(5);
 
-    private record LogoKey(Market market, String symbol) {
-    }
-
     private final ObjectMapper mapper = new ObjectMapper();
-    private final Map<LogoKey, Optional<URI>> stockCache = new ConcurrentHashMap<>();
+    private final ApplicationCaches caches;
     private final WebClient tradingView = WebClient.builder()
             .baseUrl("https://scanner.tradingview.com")
             .defaultHeader("User-Agent", "Mozilla/5.0")
@@ -32,15 +30,20 @@ public class AssetLogoService {
             .codecs(c -> c.defaultCodecs().maxInMemorySize(1024 * 1024))
             .build();
 
+    public AssetLogoService(ApplicationCaches caches) {
+        this.caches = caches;
+    }
+
     public Optional<URI> logoUri(Market market, String symbol) {
         String normalized = normalizeSymbol(symbol);
-        if (normalized.isBlank()) return Optional.empty();
+        if (market == null || normalized.isBlank()) return Optional.empty();
         if (market == Market.CRYPTO) {
             if (!normalized.matches("[A-Z0-9]+")) return Optional.empty();
             return Optional.of(URI.create("https://assets.coincap.io/assets/icons/"
                     + normalized.toLowerCase(Locale.ROOT) + "@2x.png"));
         }
-        return stockCache.computeIfAbsent(new LogoKey(market, normalized), this::fetchStockLogo);
+        LogoKey key = new LogoKey(market, normalized);
+        return caches.logo(key, () -> fetchStockLogo(key));
     }
 
     private Optional<URI> fetchStockLogo(LogoKey key) {

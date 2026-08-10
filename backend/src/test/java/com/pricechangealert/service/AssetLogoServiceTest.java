@@ -3,6 +3,8 @@ package com.pricechangealert.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.pricechangealert.cache.ApplicationCaches;
+import com.pricechangealert.cache.CacheProperties;
 import com.pricechangealert.model.Market;
 import java.net.URI;
 import java.util.Optional;
@@ -10,7 +12,8 @@ import org.junit.jupiter.api.Test;
 
 class AssetLogoServiceTest {
 
-    private final AssetLogoService service = new AssetLogoService();
+    private final AssetLogoService service = new AssetLogoService(
+            new ApplicationCaches(new CacheProperties()));
 
     @Test
     void buildsCoinCapLogoForCryptoSymbol() {

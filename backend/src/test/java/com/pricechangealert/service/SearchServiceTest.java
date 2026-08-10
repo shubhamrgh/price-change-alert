@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.pricechangealert.cache.ApplicationCaches;
+import com.pricechangealert.cache.CacheProperties;
 import com.pricechangealert.model.Market;
 import com.pricechangealert.model.Suggestion;
 import java.util.List;
@@ -11,7 +13,8 @@ import org.junit.jupiter.api.Test;
 
 class SearchServiceTest {
 
-    private final SearchService service = new SearchService();
+    private final SearchService service = new SearchService(
+            new ApplicationCaches(new CacheProperties()));
 
     @Test
     void singleLetterStockSearchReturnsImmediateSuggestions() {

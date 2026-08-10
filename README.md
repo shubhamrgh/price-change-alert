@@ -15,9 +15,9 @@ the backend polls prices and pushes a notification to your phone the moment one 
 
 | Market | Primary | Fallback |
 |--------|---------|----------|
-| Crypto  | CoinGecko (official API, free, no key) | Yahoo Finance (`BTC-INR` / `BTC-USD`) |
-| NSE     | Yahoo Finance (`RELIANCE.NS`) | — |
-| BSE     | Yahoo Finance (`RELIANCE.BO`) | — |
+| Crypto  | Coinbase spot price | CoinGecko, then Yahoo Finance (`BTC-INR` / `BTC-USD`) |
+| NSE     | Yahoo Finance (`RELIANCE.NS`) | Google Finance |
+| BSE     | Yahoo Finance (`RELIANCE.BO`) | Google Finance |
 
 Crypto is quoted in USD (stocks in INR). NSE/BSE direct endpoints
 (nseindia.com / api.bseindia.com) were tried and removed: they are bot-blocked
@@ -60,6 +60,11 @@ mvnw.cmd package
 | Key | Meaning |
 |-----|---------|
 | `price-change-alert.poll.interval-ms` | alert engine poll cadence (default 30000) |
+| `price-change-alert.poll.max-quote-age` | oldest quote allowed to trigger an alert (default 2 minutes) |
+| `price-change-alert.cache.quote-ttl` | quote cache freshness window (default 20 seconds) |
+| `price-change-alert.cache.search-ttl` | successful search cache window (default 10 minutes) |
+| `price-change-alert.cache.chart-ttl` | chart cache window (default 5 minutes) |
+| `price-change-alert.cache.logo-ttl` | resolved stock-logo cache window (default 24 hours) |
 | `PRICE_CHANGE_ALERT_VAPID_PUBLIC_KEY` / `PRICE_CHANGE_ALERT_VAPID_PRIVATE_KEY` | Web Push keys; required for notifications in production |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Production PostgreSQL connection |
 
@@ -77,10 +82,30 @@ Local-only VAPID values belong in `backend/application-local.properties`, which 
 | `GET /api/alerts` | last 50 triggered alerts |
 | `GET /api/push/vapid-key` · `POST /api/push/subscribe` · `DELETE /api/push/unsubscribe` | push plumbing |
 
-Alert logic: PRICE alerts when `price <= threshold`; PERCENT alerts when the
-drop from the previous polled price is `>= threshold%`. Re-alerts only fire on
-a further 0.5% drop below the last alerted level, so a symbol sitting under the
-threshold doesn't spam you every 30 s.
+Alert logic: PRICE alerts when the configured threshold is reached; PERCENT
+alerts compare the latest quote with the previous poll. A triggered watch item
+is persisted and paused in the same short transaction before push delivery.
+
+## Caching and polling design
+
+The app uses bounded, per-instance Caffeine caches with normalized keys and
+single-flight loading. Duplicate quote, search, chart, and logo requests share
+one upstream call. Successful and failed lookups have separate TTLs so brief
+provider outages do not become long-lived negative results. Cache hit/miss,
+eviction, and size metrics are registered with Actuator.
+
+The browser pauses its 30-second watchlist refresh while the tab is hidden,
+refreshes when focus returns, and cancels obsolete search requests. Content-
+hashed frontend assets are served with immutable one-year browser caching.
+
+The alert scheduler performs network calls outside database transactions, then
+locks and updates each watch item in its own transaction. This keeps database
+connections short-lived and prevents duplicate processing across app instances.
+
+These caches are intentionally local to one process. A multi-instance deployment
+should replace them with Redis (or another shared cache) and use a distributed
+scheduler lock. Render's free-tier suspension is platform behavior; application
+caching does not keep a sleeping service alive.
 
 ## Push notifications on mobile
 

@@ -3,7 +3,10 @@ package com.pricechangealert.web;
 import com.pricechangealert.model.Chart;
 import com.pricechangealert.model.Market;
 import com.pricechangealert.service.ChartService;
+import java.time.Duration;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -22,14 +25,17 @@ public class ChartController {
     }
 
     @GetMapping
-    public Chart chart(@RequestParam Market market,
-                       @RequestParam String symbol,
-                       @RequestParam(defaultValue = "30") int days,
-                       @RequestParam(defaultValue = "inr") String currency) {
+    public ResponseEntity<Chart> chart(@RequestParam Market market,
+                                      @RequestParam String symbol,
+                                      @RequestParam(defaultValue = "30") int days,
+                                      @RequestParam(defaultValue = "inr") String currency) {
         if (days < 1) days = 1;
         if (days > 365) days = 365;
-        return chartService.chart(symbol, market, days, currency)
+        Chart chart = chartService.chart(symbol, market, days, currency)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "No history for " + symbol + " on " + market));
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.maxAge(Duration.ofMinutes(5)).cachePublic())
+                .body(chart);
     }
 }

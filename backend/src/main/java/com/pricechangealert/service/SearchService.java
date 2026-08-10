@@ -2,6 +2,8 @@ package com.pricechangealert.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.pricechangealert.cache.ApplicationCaches;
+import com.pricechangealert.cache.ApplicationCaches.SearchKey;
 import com.pricechangealert.model.Market;
 import com.pricechangealert.model.Suggestion;
 import java.time.Duration;
@@ -12,6 +14,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -181,8 +184,10 @@ public class SearchService {
     private final ObjectMapper mapper = new ObjectMapper();
     private final WebClient yahoo;
     private final WebClient coinGecko;
+    private final ApplicationCaches caches;
 
-    public SearchService() {
+    @Autowired
+    public SearchService(ApplicationCaches caches) {
         this(WebClient.builder()
                         .defaultHeader("User-Agent",
                                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -192,18 +197,24 @@ public class SearchService {
                 WebClient.builder()
                         .baseUrl("https://api.coingecko.com/api/v3")
                         .codecs(c -> c.defaultCodecs().maxInMemorySize(2 * 1024 * 1024))
-                        .build());
+                        .build(),
+                caches);
     }
 
-    SearchService(WebClient yahoo, WebClient coinGecko) {
+    SearchService(WebClient yahoo, WebClient coinGecko, ApplicationCaches caches) {
         this.yahoo = yahoo;
         this.coinGecko = coinGecko;
+        this.caches = caches;
     }
 
     public List<Suggestion> search(String q, Market market) {
         String query = q == null ? "" : q.trim();
-        if (query.isEmpty()) return List.of();
+        if (query.isEmpty() || market == null) return List.of();
+        SearchKey key = new SearchKey(market, query);
+        return caches.search(key, () -> searchUncached(key.query(), key.market()));
+    }
 
+    private List<Suggestion> searchUncached(String query, Market market) {
         return switch (market) {
             case CRYPTO -> searchCrypto(query);
             case NSE -> searchStocks(query, Market.NSE, ".NS");

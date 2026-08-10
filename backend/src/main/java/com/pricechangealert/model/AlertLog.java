@@ -5,12 +5,15 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.time.Instant;
 
 @Entity
-@Table(name = "alert_logs")
+@Table(name = "alert_logs", indexes = {
+        @Index(name = "idx_alert_logs_owner_created", columnList = "owner_id,created_at")
+})
 public class AlertLog {
 
     @Id
@@ -30,7 +33,7 @@ public class AlertLog {
 
     private double price;
 
-    @Column(nullable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
     public Long getId() { return id; }

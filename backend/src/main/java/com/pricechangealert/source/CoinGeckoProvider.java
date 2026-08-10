@@ -1,5 +1,7 @@
 package com.pricechangealert.source;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pricechangealert.model.Market;
@@ -12,6 +14,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 import org.springframework.core.annotation.Order;
@@ -20,7 +23,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 /**
- * Primary crypto source: CoinGecko (official, free, no key).
+ * Rate-limited crypto fallback: CoinGecko (official, free, no key).
  * Uses the coins/list endpoint once (cached 24h) so users can type BTC/ETH/SHIB etc.
  *
  * The free tier rate-limits aggressively, so all calls are throttled to one every
@@ -36,6 +39,7 @@ public class CoinGeckoProvider implements PriceProvider {
     private static final String BASE = "https://api.coingecko.com/api/v3";
     private static final long MIN_GAP_MS = 5_000;
     private static final long CACHE_TTL_MS = 45_000;
+    private static final long MAX_STALE_MS = 10 * 60 * 1000;
     private static final Duration HTTP_TIMEOUT = Duration.ofSeconds(6);
 
     /** Canonical id overrides: the coins/list symbol map can collide (e.g. a meme coin also tickers BTC). */
@@ -67,7 +71,10 @@ public class CoinGeckoProvider implements PriceProvider {
 
     private final WebClient client;
     private final ObjectMapper mapper = new ObjectMapper();
-    private final Map<String, CachedQuote> priceCache = new ConcurrentHashMap<>();
+    private final Cache<String, CachedQuote> priceCache = Caffeine.newBuilder()
+            .maximumSize(2_000)
+            .expireAfterAccess(30, TimeUnit.MINUTES)
+            .build();
     private final Object callGate = new Object();
     private long lastCallAt = 0;
 
@@ -130,34 +137,30 @@ public class CoinGeckoProvider implements PriceProvider {
 
     /** Return a fresh-enough cached quote for the id, hitting the API at most every MIN_GAP_MS. */
     private CachedQuote updateQuote(String id) {
-        CachedQuote cached = priceCache.get(id);
+        CachedQuote cached = priceCache.getIfPresent(id);
         long now = System.currentTimeMillis();
         if (cached != null && now - cached.fetchedAt() < CACHE_TTL_MS) return cached;
 
-        JsonNode node = null;
-        synchronized (callGate) {
-            long wait = MIN_GAP_MS - (System.currentTimeMillis() - lastCallAt);
-            if (wait > 0) {
-                try {
-                    Thread.sleep(wait);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }
-            node = getJson(client.get()
-                    .uri("/simple/price?ids={id}&vs_currencies=inr,usd", id));
-            if (node != null) lastCallAt = System.currentTimeMillis();
-        }
+        JsonNode node = rateLimitedGet(client.get()
+                .uri("/simple/price?ids={id}&vs_currencies=inr,usd", id));
         if (node == null || !node.has(id)) {
-            return cached != null ? cached : new CachedQuote(now - CACHE_TTL_MS, 0, 0);
+            return isUsableStale(cached, now) ? cached : emptyQuote(now);
         }
         JsonNode v = node.path(id);
         double inr = v.path(INR).asDouble(0);
         double usd = v.path(USD).asDouble(0);
-        if (inr <= 0 && usd <= 0) return cached != null ? cached : new CachedQuote(now - CACHE_TTL_MS, 0, 0);
+        if (inr <= 0 && usd <= 0) return isUsableStale(cached, now) ? cached : emptyQuote(now);
         CachedQuote fresh = new CachedQuote(System.currentTimeMillis(), inr, usd);
         priceCache.put(id, fresh);
         return fresh;
+    }
+
+    private static boolean isUsableStale(CachedQuote cached, long now) {
+        return cached != null && now - cached.fetchedAt() <= MAX_STALE_MS;
+    }
+
+    private static CachedQuote emptyQuote(long now) {
+        return new CachedQuote(now - CACHE_TTL_MS, 0, 0);
     }
 
     private static String normalize(String currency) {
@@ -186,20 +189,8 @@ public class CoinGeckoProvider implements PriceProvider {
         String cur = normalize(currency);
         String id = resolveId(symbol);
         if (id == null) return Optional.empty();
-        JsonNode node;
-        synchronized (callGate) {
-            long wait = MIN_GAP_MS - (System.currentTimeMillis() - lastCallAt);
-            if (wait > 0) {
-                try {
-                    Thread.sleep(wait);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }
-            node = getJson(client.get()
-                    .uri("/coins/{id}/market_chart?vs_currency={cur}&days={days}", id, cur, days));
-            if (node != null) lastCallAt = System.currentTimeMillis();
-        }
+        JsonNode node = rateLimitedGet(client.get()
+                .uri("/coins/{id}/market_chart?vs_currency={cur}&days={days}", id, cur, days));
         JsonNode prices = node == null ? null : node.path("prices");
         if (prices == null || !prices.isArray() || prices.isEmpty()) return Optional.empty();
         List<double[]> out = new ArrayList<>(prices.size());
@@ -213,7 +204,7 @@ public class CoinGeckoProvider implements PriceProvider {
 
     private void loadSymbolMap() throws Exception {
         if (!symbolToId.isEmpty() && System.currentTimeMillis() - listFetchedAt < LIST_TTL_MS) return;
-        JsonNode list = getJson(client.get().uri("/coins/list"));
+        JsonNode list = rateLimitedGet(client.get().uri("/coins/list"));
         if (list == null || !list.isArray()) return;
         symbolToId = StreamSupport.stream(list.spliterator(), false)
                 .filter(n -> n.hasNonNull("symbol") && n.hasNonNull("id") && n.hasNonNull("name"))
@@ -239,6 +230,25 @@ public class CoinGeckoProvider implements PriceProvider {
             return body == null || body.isBlank() ? null : mapper.readTree(body);
         } catch (Exception e) {
             return null;
+        }
+    }
+
+    private JsonNode rateLimitedGet(WebClient.RequestHeadersSpec<?> request) {
+        synchronized (callGate) {
+            long wait = MIN_GAP_MS - (System.currentTimeMillis() - lastCallAt);
+            if (wait > 0) {
+                try {
+                    Thread.sleep(wait);
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    return null;
+                }
+            }
+            try {
+                return getJson(request);
+            } finally {
+                lastCallAt = System.currentTimeMillis();
+            }
         }
     }
 }
