@@ -4,12 +4,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pricechangealert.model.Market;
 import com.pricechangealert.model.Quote;
+import java.time.Duration;
 import java.time.Instant;
-import java.util.Locale;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -19,9 +21,13 @@ import reactor.core.publisher.Mono;
  * NSE -> SYMBOL.NS, BSE -> SYMBOL.BO, crypto -> SYMBOL-INR.
  */
 @Component
+@Order(20)
 public class YahooProvider implements PriceProvider {
 
-    private static final String TICKER_TEMPLATE = "https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1d&range=1d";
+    private static final Duration TIMEOUT = Duration.ofSeconds(5);
+    private static final List<String> HOSTS = List.of(
+            "https://query1.finance.yahoo.com",
+            "https://query2.finance.yahoo.com");
 
     private static final Map<Market, String> SUFFIX = Map.of(
             Market.NSE, ".NS",
@@ -34,6 +40,7 @@ public class YahooProvider implements PriceProvider {
         this.client = WebClient.builder()
                 .defaultHeader("User-Agent",
                         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36")
+                .defaultHeader("Accept", "application/json")
                 .codecs(c -> c.defaultCodecs().maxInMemorySize(4 * 1024 * 1024))
                 .build();
     }
@@ -54,18 +61,27 @@ public class YahooProvider implements PriceProvider {
         try {
             String sym = symbol.trim().toUpperCase(Locale.ROOT);
             String ticker = tickerFor(sym, market, currency);
-            JsonNode node = getJson(client.get().uri(TICKER_TEMPLATE, ticker));
-            if (node == null || !node.path("chart").path("error").isNull()) return Optional.empty();
-            JsonNode meta = node.path("chart").path("result").path(0).path("meta");
-            double price = meta.path("regularMarketPrice").asDouble(0);
-            if (price <= 0) return Optional.empty();
-            String currencyOut = meta.path("currency").asText("INR");
-            String displayName = meta.path("shortName").asText("");
-            if (displayName.isBlank()) displayName = meta.path("longName").asText(sym);
-            return Optional.of(new Quote(market, sym, displayName, price, currencyOut, "yahoo", Instant.now()));
+            for (String host : HOSTS) {
+                JsonNode node = getJson(client.get().uri(
+                        host + "/v8/finance/chart/{ticker}?interval=1d&range=1d", ticker));
+                Optional<Quote> quote = parseQuote(node, sym, market);
+                if (quote.isPresent()) return quote;
+            }
+            return Optional.empty();
         } catch (Exception e) {
             return Optional.empty();
         }
+    }
+
+    private Optional<Quote> parseQuote(JsonNode node, String symbol, Market market) {
+        if (node == null || !node.path("chart").path("error").isNull()) return Optional.empty();
+        JsonNode meta = node.path("chart").path("result").path(0).path("meta");
+        double price = meta.path("regularMarketPrice").asDouble(0);
+        if (price <= 0) return Optional.empty();
+        String currencyOut = meta.path("currency").asText(market == Market.CRYPTO ? "USD" : "INR");
+        String displayName = meta.path("shortName").asText("");
+        if (displayName.isBlank()) displayName = meta.path("longName").asText(symbol);
+        return Optional.of(new Quote(market, symbol, displayName, price, currencyOut, name(), Instant.now()));
     }
 
     private String tickerFor(String sym, Market market, String currency) {
@@ -80,9 +96,12 @@ public class YahooProvider implements PriceProvider {
             String sym = symbol.trim().toUpperCase(Locale.ROOT);
             String ticker = tickerFor(sym, market, currency);
             String range = days <= 8 ? "5d" : days <= 31 ? "1mo" : days <= 95 ? "3mo" : days <= 190 ? "6mo" : "1y";
-            JsonNode node = getJson(client.get()
-                    .uri("https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1d&range={range}",
-                            ticker, range));
+            JsonNode node = null;
+            for (String host : HOSTS) {
+                node = getJson(client.get().uri(
+                        host + "/v8/finance/chart/{ticker}?interval=1d&range={range}", ticker, range));
+                if (node != null && node.path("chart").path("error").isNull()) break;
+            }
             if (node == null || !node.path("chart").path("error").isNull()) return Optional.empty();
             JsonNode timestamps = node.path("chart").path("result").path(0).path("timestamp");
             JsonNode closes = node.path("chart").path("result").path(0).path("indicators").path("quote").path(0).path("close");
@@ -101,6 +120,7 @@ public class YahooProvider implements PriceProvider {
     private JsonNode getJson(WebClient.RequestHeadersSpec<?> spec) {
         try {
             String body = spec.retrieve().bodyToMono(String.class)
+                    .timeout(TIMEOUT)
                     .onErrorResume(e -> Mono.empty())
                     .block();
             return body == null || body.isBlank() ? null : mapper.readTree(body);

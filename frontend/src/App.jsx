@@ -45,6 +45,27 @@ const timeAgo = (iso) => {
   return fmtTime(iso)
 }
 
+function MarketIcon({ market, className = '' }) {
+  const isCrypto = market === 'CRYPTO'
+  return (
+    <span className={`market-icon ${isCrypto ? 'crypto' : 'stock'} ${className}`} aria-hidden="true">
+      <svg viewBox="0 0 24 24" focusable="false">
+        {isCrypto ? (
+          <>
+            <circle cx="12" cy="12" r="8.25" fill="none" stroke="currentColor" strokeWidth="1.8" />
+            <path d="M9.5 8.5h3.25a2 2 0 0 1 0 4H10.5a2 2 0 0 0 0 4h3.75M12 6.75v10.5" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" />
+          </>
+        ) : (
+          <>
+            <path d="M5 18.5V12M10 18.5V8M15 18.5v-5M20 18.5V5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <path d="m4 9 5-4 5 3 6-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </>
+        )}
+      </svg>
+    </span>
+  )
+}
+
 async function api(path, options = {}) {
   const res = await fetch(path, {
     ...options,
@@ -179,34 +200,61 @@ export default function App() {
 function AddForm({ onAdded }) {
   const [market, setMarket] = useState('NSE')
   const [query, setQuery] = useState('')
+  const [name, setName] = useState('')
   const [triggerMode, setTriggerMode] = useState('BELOW')
   const [threshold, setThreshold] = useState('')
   const currency = market === 'CRYPTO' ? 'USD' : 'INR'
   const [suggestions, setSuggestions] = useState([])
   const [open, setOpen] = useState(false)
+  const [searching, setSearching] = useState(false)
+  const [searchMessage, setSearchMessage] = useState('')
   const [picked, setPicked] = useState(null)
   const [preview, setPreview] = useState(null)
+  const [quoteLoading, setQuoteLoading] = useState(false)
   const focused = useRef(false)
   const blurTimer = useRef(null)
+  const quoteRequestId = useRef(0)
   const [err, setErr] = useState('')
 
   useEffect(() => {
     const q = query.trim()
-    if (!q) { setSuggestions([]); setOpen(false); return }
+    if (!q) {
+      setSuggestions([])
+      setOpen(false)
+      setSearching(false)
+      setSearchMessage('')
+      return
+    }
     const pickedSym = picked && picked.symbol
-    if (pickedSym && q.toUpperCase() === pickedSym) { setSuggestions([]); setOpen(false); return }
+    if (pickedSym && q.toUpperCase() === pickedSym) {
+      setSuggestions([])
+      setOpen(false)
+      setSearching(false)
+      setSearchMessage('')
+      return
+    }
     let alive = true
+    setSearching(true)
+    setSearchMessage('')
     const t = setTimeout(() => {
       api(`/api/search?q=${encodeURIComponent(q)}&market=${market}`)
         .then((s) => {
           if (!alive) return
-          setSuggestions(s)
+          const next = Array.isArray(s) ? s : []
+          setSuggestions(next)
+          setSearchMessage(next.length ? '' : 'No matching symbols found')
           if (focused.current) setOpen(true)
         })
-        .catch(() => alive && setOpen(false))
+        .catch(() => {
+          if (!alive) return
+          setSuggestions([])
+          setSearchMessage('Suggestions are temporarily unavailable')
+          if (focused.current) setOpen(true)
+        })
+        .finally(() => alive && setSearching(false))
     }, 250)
-    return () => { alive = false; clearTimeout(t) }
-  }, [query, market])
+    return () => { alive = false; clearTimeout(t); setSearching(false) }
+  }, [query, market, picked])
 
   const closeSoon = () => {
     clearTimeout(blurTimer.current)
@@ -214,17 +262,21 @@ function AddForm({ onAdded }) {
   }
 
   const pick = async (s) => {
+    const requestId = ++quoteRequestId.current
     setPicked(s)
     setQuery(s.symbol)
     setSuggestions([])
     setOpen(false)
     setPreview(null)
+    setQuoteLoading(true)
     setErr('')
     try {
       const q = await api(`/api/quote?market=${market}&symbol=${encodeURIComponent(s.symbol)}&currency=${currency.toLowerCase()}`)
-      setPreview(q)
+      if (quoteRequestId.current === requestId) setPreview(q)
     } catch (e) {
-      setErr(e.message)
+      if (quoteRequestId.current === requestId) setErr(e.message)
+    } finally {
+      if (quoteRequestId.current === requestId) setQuoteLoading(false)
     }
   }
 
@@ -232,27 +284,34 @@ function AddForm({ onAdded }) {
     e.preventDefault()
     setErr('')
     const val = parseFloat(threshold)
-    const sym = (query || '').trim()
-    if (!sym || !Number.isFinite(val) || val <= 0) {
-      setErr('Pick a symbol and enter a threshold')
+    if (!picked) {
+      setErr('Select a stock or coin from the suggestion list')
+      return
+    }
+    const sym = picked.symbol
+    if (!Number.isFinite(val) || val <= 0) {
+      setErr('Enter a valid threshold')
       return
     }
     try {
       await api('/api/watchlist', {
         method: 'POST',
         body: JSON.stringify({
-          symbol: sym, name: picked ? picked.name : null, market,
+          symbol: sym, name: name.trim() || (picked ? picked.name : null), market,
           triggerType: triggerMode === 'PERCENT' || triggerMode === 'PERCENT_UP' ? 'PERCENT' : 'PRICE',
           direction: triggerMode === 'ABOVE' || triggerMode === 'PERCENT_UP' ? 'ABOVE' : 'BELOW',
           thresholdValue: val, currency,
         }),
       })
       setQuery('')
+      setName('')
       setThreshold('')
       setPicked(null)
       setPreview(null)
+      setQuoteLoading(false)
       setSuggestions([])
       setOpen(false)
+      setSearchMessage('')
       onAdded()
     } catch (e2) {
       setErr(e2.message)
@@ -263,29 +322,62 @@ function AddForm({ onAdded }) {
     <form className="card add-form" onSubmit={submit}>
       <h2>Add watch item</h2>
       <div className="searchbox">
-        <select className="market-select" value={market} onChange={(e) => { setMarket(e.target.value); setPicked(null); setPreview(null); setErr('') }}>
+        <select className="market-select" value={market} onChange={(e) => {
+          quoteRequestId.current += 1
+          setMarket(e.target.value)
+          setQuery('')
+          setName('')
+          setPicked(null)
+          setPreview(null)
+          setQuoteLoading(false)
+          setSuggestions([])
+          setOpen(false)
+          setSearchMessage('')
+          setErr('')
+        }}>
           <option value="NSE">Stock · NSE (₹)</option>
           <option value="BSE">Stock · BSE (₹)</option>
           <option value="CRYPTO">Crypto ($)</option>
         </select>
-        <input placeholder={market === 'CRYPTO' ? 'Search coins... (BTC, ETH, DOGE)' : 'Search stocks... (RELIANCE, TCS)'} value={query}
-               onChange={(e) => { setQuery(e.target.value); setPicked(null); setPreview(null) }}
-               onFocus={() => { focused.current = true; if (suggestions.length) setOpen(true) }}
+        <div className="search-input-wrap">
+          <MarketIcon market={market} />
+          <input placeholder={market === 'CRYPTO' ? 'Search coins... (BTC, ETH, DOGE)' : 'Search stocks... (RELIANCE, TCS)'} value={query}
+               onChange={(e) => {
+                 quoteRequestId.current += 1
+                 setQuery(e.target.value)
+                 setPicked(null)
+                 setPreview(null)
+                 setQuoteLoading(false)
+                 setErr('')
+               }}
+               onFocus={() => { focused.current = true; if (query.trim()) setOpen(true) }}
                onBlur={() => { focused.current = false; closeSoon() }}
-               onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false) }}
+               onKeyDown={(e) => {
+                 if (e.key === 'Escape') setOpen(false)
+                 if (e.key === 'Enter' && open && suggestions.length > 0) {
+                   e.preventDefault()
+                   pick(suggestions[0])
+                 }
+               }}
                autoComplete="off" />
-        {open && suggestions.length > 0 && (
+        </div>
+        {open && (searching || suggestions.length > 0 || searchMessage) && (
           <ul className="suggest" onMouseDown={(e) => e.preventDefault()}>
-            {suggestions.map((s, i) => (
+            {searching && <li className="suggest-status">Searching {market === 'CRYPTO' ? 'coins' : 'stocks'}...</li>}
+            {!searching && suggestions.map((s, i) => (
               <li key={`${s.symbol}-${i}`} onMouseDown={() => pick(s)}>
-                <span className="s-sym">{s.symbol}</span>
-                <span className="s-name">{s.name}</span>
+                <MarketIcon market={s.market || market} className="suggest-icon" />
+                <span className="suggest-copy">
+                  <span className="s-sym">{s.symbol}</span>
+                  <span className="s-name">{s.name}</span>
+                </span>
               </li>
             ))}
+            {!searching && suggestions.length === 0 && searchMessage && <li className="suggest-status">{searchMessage}</li>}
           </ul>
         )}
       </div>
-      {picked && !preview && <div className="hint">Fetching live price...</div>}
+      {quoteLoading && <div className="hint">Fetching live price...</div>}
       {preview && (
         <div className="preview">
           <span className="dot" />
@@ -337,6 +429,7 @@ function WatchCard({ item, onDelete, onToggle }) {
     <li className={`card watch-card ${!item.active ? 'paused' : ''}`}>
       <button className="card-main" onClick={() => setExpanded((v) => !v)}>
         <div className="item-top">
+          <MarketIcon market={item.market} className="watch-market-icon" />
           <span className="mk">{item.market}</span>
           <div className="sym-col">
             <strong className="sym">{item.symbol}</strong>
@@ -363,6 +456,7 @@ function WatchCard({ item, onDelete, onToggle }) {
               : (rises ? `above ${fmtThreshold(item.thresholdValue, cur)}` : `below ${fmtThreshold(item.thresholdValue, cur)}`)}
           </span>
           {hit && <span className="tag tag-warn">hit</span>}
+          {!item.active && item.lastAlertedAt && <span className="tag tag-warn">triggered · paused</span>}
         </div>
       </button>
       {expanded && <ChartPanel item={item} />}

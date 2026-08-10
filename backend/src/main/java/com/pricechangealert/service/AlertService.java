@@ -81,8 +81,9 @@ Quote q = quoteOpt.get();
                 alertLogRepository.save(entry);
                 item.setLastAlertedAt(java.time.Instant.now());
                 item.setLastAlertedPrice(q.price());
+                item.setActive(false);
                 pushService.notifyAll(item.getOwnerId(), item.getSymbol(), item.getMarket(), message);
-                log.info("ALERT {} {}", item.getSymbol(), message);
+                log.info("ALERT {} {} (watch item paused)", item.getSymbol(), message);
             }
 
             item.setPreviousPrice(previous);

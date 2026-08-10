@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pricechangealert.model.Market;
 import com.pricechangealert.model.Quote;
 import java.time.Instant;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -13,6 +14,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
+import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -28,11 +30,13 @@ import reactor.core.publisher.Mono;
  * single /simple/price call, so switching currency is cheap.
  */
 @Component
+@Order(10)
 public class CoinGeckoProvider implements PriceProvider {
 
     private static final String BASE = "https://api.coingecko.com/api/v3";
     private static final long MIN_GAP_MS = 5_000;
     private static final long CACHE_TTL_MS = 45_000;
+    private static final Duration HTTP_TIMEOUT = Duration.ofSeconds(6);
 
     /** Canonical id overrides: the coins/list symbol map can collide (e.g. a meme coin also tickers BTC). */
     private static final Map<String, String> KNOWN_IDS = Map.ofEntries(
@@ -229,6 +233,7 @@ public class CoinGeckoProvider implements PriceProvider {
     private JsonNode getJson(WebClient.RequestHeadersSpec<?> spec) {
         try {
             String body = spec.retrieve().bodyToMono(String.class)
+                    .timeout(HTTP_TIMEOUT)
                     .onErrorResume(e -> Mono.empty())
                     .block();
             return body == null || body.isBlank() ? null : mapper.readTree(body);
