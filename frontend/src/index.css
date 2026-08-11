@@ -111,6 +111,13 @@ body {
   font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; cursor: pointer;
 }
 .bell.on { color: var(--up); border-color: var(--up); background: color-mix(in srgb, var(--up) 10%, transparent); }
+.auth-loading { align-items: center; justify-content: center; min-height: 70dvh; color: var(--muted); }
+.auth-shell { min-height: 100dvh; }
+.auth-card { display: flex; flex-direction: column; gap: 12px; margin-top: 18vh; }
+.auth-card h2, .settings-intro h2 { margin: 0; font-size: 1.15rem; }
+.auth-copy, .settings-intro p, .channel-card p { margin: 0; color: var(--muted); font-size: 0.82rem; line-height: 1.45; }
+.auth-card label { display: flex; flex-direction: column; gap: 6px; font-size: 0.78rem; color: var(--muted); font-weight: 700; }
+.auth-switch { background: transparent; border: 0; color: var(--accent); padding: 4px; cursor: pointer; font-size: 0.82rem; }
 
 /* ---------- banners / tabs ---------- */
 .banner { padding: 10px 12px; border-radius: 10px; font-size: 0.85rem; }
@@ -340,6 +347,19 @@ li.paused { opacity: 0.5; }
 }
 
 .empty { color: var(--muted); text-align: center; font-size: 0.9rem; padding: 24px 0; }
+
+/* ---------- notification settings ---------- */
+.notification-settings { display: flex; flex-direction: column; gap: 10px; }
+.settings-intro { display: flex; flex-direction: column; gap: 7px; }
+.channel-card { display: flex; flex-direction: column; gap: 10px; }
+.channel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.channel-heading h3 { margin: 0 0 4px; font-size: 0.95rem; }
+.channel-status { flex: 0 0 auto; border: 1px solid var(--border-strong); border-radius: 999px; padding: 4px 8px; color: var(--muted); font-size: 0.68rem; font-weight: 700; }
+.channel-status.enabled { color: var(--up); border-color: var(--up); }
+.channel-actions { display: flex; justify-content: flex-end; }
+.active-action { color: var(--down) !important; border-color: var(--down) !important; }
+.channel-help { color: var(--down) !important; }
+.channel-card.unavailable { opacity: 0.72; }
 
 /* ---------- wider screens ---------- */
 @media (min-width: 900px) {

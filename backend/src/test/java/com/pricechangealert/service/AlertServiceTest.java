@@ -14,6 +14,7 @@ import com.pricechangealert.model.WatchItem;
 import com.pricechangealert.repository.AlertLogRepository;
 import com.pricechangealert.repository.WatchItemRepository;
 import com.pricechangealert.source.PriceService;
+import com.pricechangealert.service.notification.NotificationOutboxService;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -27,25 +28,25 @@ class AlertServiceTest {
         WatchItemRepository watchItems = mock(WatchItemRepository.class);
         PriceService prices = mock(PriceService.class);
         AlertItemProcessor processor = mock(AlertItemProcessor.class);
-        PushService push = mock(PushService.class);
         WatchItem item = watchItem();
         when(watchItems.findAllByActiveTrueOrderByIdAsc()).thenReturn(List.of(item));
         when(prices.fetch("RELIANCE", Market.NSE, "INR")).thenReturn(Optional.of(
                 new Quote(Market.NSE, "RELIANCE", "Reliance Industries",
                         90, "INR", "cached", Instant.now().minus(Duration.ofMinutes(3)))));
         AlertService service = new AlertService(
-                watchItems, prices, processor, push, Duration.ofMinutes(2));
+                watchItems, prices, processor, Duration.ofMinutes(2));
 
         service.poll();
 
-        verifyNoInteractions(processor, push);
+        verifyNoInteractions(processor);
     }
 
     @Test
     void pausesWatchItemAfterAlertIsTriggered() {
         WatchItemRepository watchItems = mock(WatchItemRepository.class);
         AlertLogRepository alertLogs = mock(AlertLogRepository.class);
-        AlertItemProcessor processor = new AlertItemProcessor(watchItems, alertLogs);
+        NotificationOutboxService outbox = mock(NotificationOutboxService.class);
+        AlertItemProcessor processor = new AlertItemProcessor(watchItems, alertLogs, outbox);
 
         WatchItem item = watchItem();
         when(watchItems.findByIdForUpdate(1L)).thenReturn(Optional.of(item));
@@ -57,6 +58,7 @@ class AlertServiceTest {
         assertTrue(result.isPresent());
         assertFalse(item.isActive());
         verify(alertLogs).save(any());
+        verify(outbox).enqueue(any(), any(), any(), any());
         verify(watchItems).save(item);
     }
 

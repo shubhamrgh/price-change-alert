@@ -1,7 +1,14 @@
 # Price Change Alert — Indian stock & crypto price-change alerts (PWA)
 
-Phase 1 mobile-first web app: add NSE/BSE stocks and crypto coins to a watchlist;
-the backend polls prices and pushes a notification to your phone the moment one drops.
+Add NSE/BSE stocks and crypto coins to a watchlist; the backend polls prices and
+delivers alerts to the authenticated subscriber's selected channels.
+
+Accounts use an opaque, hashed server-side session token in an HttpOnly cookie.
+Watchlists, alerts, browser subscriptions, and notification destinations are
+owned by the account ID; caller-supplied visitor IDs are no longer trusted for
+private data. On the first login or registration after upgrading, the browser's
+previous visitor token is used once to claim its existing watchlist, alerts, and
+Web Push subscription for the authenticated account.
 
 ## Stack
 
@@ -9,7 +16,7 @@ the backend polls prices and pushes a notification to your phone the moment one 
 |--------|------|
 | Backend  | Java 21, Spring Boot 4, H2 locally / PostgreSQL in production, WebClient, web-push |
 | Frontend | React 19 + Vite 8, service worker, manifest (PWA) |
-| Notifications | Web Push / VAPID (works on Android Chrome + iOS Safari 16.4+, HTTPS required) |
+| Notifications | Durable multi-channel outbox: Web Push, email, Telegram, Discord |
 
 ## Data sources (fallback chain)
 
@@ -50,7 +57,7 @@ After changing the frontend, ship the UI into the backend jar:
 ```
 cd frontend
 npm run build
-(contents of frontend/dist auto-copied to backend/src/main/resources/static)
+copy the contents of frontend/dist to backend/src/main/resources/static
 cd ..\backend
 mvnw.cmd package
 ```
@@ -67,6 +74,10 @@ mvnw.cmd package
 | `price-change-alert.cache.logo-ttl` | resolved stock-logo cache window (default 24 hours) |
 | `PRICE_CHANGE_ALERT_VAPID_PUBLIC_KEY` / `PRICE_CHANGE_ALERT_VAPID_PRIVATE_KEY` | Web Push keys; required for notifications in production |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Production PostgreSQL connection |
+| `PRICE_CHANGE_ALERT_EMAIL_ENABLED` / `PRICE_CHANGE_ALERT_EMAIL_FROM` | Enable email delivery and choose the sender address |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` | SMTP transport for email delivery |
+| `PRICE_CHANGE_ALERT_TELEGRAM_BOT_TOKEN` | Bot token used for Telegram delivery |
+| `PRICE_CHANGE_ALERT_BASE_URL` | Absolute URL inserted into email messages |
 
 Local-only VAPID values belong in `backend/application-local.properties`, which is excluded from Git and Docker builds.
 
@@ -82,9 +93,28 @@ Local-only VAPID values belong in `backend/application-local.properties`, which 
 | `GET /api/alerts` | last 50 triggered alerts |
 | `GET /api/push/vapid-key` · `POST /api/push/subscribe` · `DELETE /api/push/unsubscribe` | push plumbing |
 
+Authentication and channel-management endpoints:
+
+* `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`
+* `GET /api/notification-preferences`, `PUT /api/notification-preferences/{channel}`
+
 Alert logic: PRICE alerts when the configured threshold is reached; PERCENT
-alerts compare the latest quote with the previous poll. A triggered watch item
-is persisted and paused in the same short transaction before push delivery.
+alerts compare the latest quote with the previous poll. A triggered watch item,
+alert log, and one outbox row per enabled channel are persisted in the same
+short transaction. A separate dispatcher claims each row, performs provider
+I/O outside database locks, and retries temporary failures with bounded
+exponential backoff. This provides at-least-once delivery.
+
+### Notification setup
+
+* Mobile/browser: configure VAPID keys, open the app over HTTPS, log in, and
+  enable Mobile / browser in the Notify tab.
+* Email: configure SMTP plus `PRICE_CHANGE_ALERT_EMAIL_ENABLED=true` and a
+  verified `PRICE_CHANGE_ALERT_EMAIL_FROM` address.
+* Telegram: create a bot, set its token, send `/start` to the bot, and enter the
+  resulting chat ID (or an `@channel` username) in Notify.
+* Discord: create an Incoming Webhook in a channel and paste its HTTPS URL in
+  Notify. Webhook URLs are write-only in the API after saving.
 
 ## Caching and polling design
 

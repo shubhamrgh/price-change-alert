@@ -1,6 +1,9 @@
 package com.pricechangealert.web;
 
 import com.pricechangealert.service.PushService;
+import com.pricechangealert.service.AuthService;
+import com.pricechangealert.service.notification.NotificationPreferenceService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import java.util.Map;
@@ -12,7 +15,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.RequestHeader;
 
 @RestController
 @RequestMapping("/api/push")
@@ -25,9 +27,14 @@ public class PushController {
     }
 
     private final PushService pushService;
+    private final AuthService authService;
+    private final NotificationPreferenceService preferences;
 
-    public PushController(PushService pushService) {
+    public PushController(PushService pushService, AuthService authService,
+                          NotificationPreferenceService preferences) {
         this.pushService = pushService;
+        this.authService = authService;
+        this.preferences = preferences;
     }
 
     @GetMapping("/vapid-key")
@@ -40,16 +47,21 @@ public class PushController {
     }
 
     @PostMapping("/subscribe")
-    public Map<String, Boolean> subscribe(@RequestHeader(value = "X-Visitor-Id", required = false) String visitorId,
+    public Map<String, Boolean> subscribe(HttpServletRequest request,
                                           @Valid @RequestBody SubscribeRequest req) {
-        pushService.saveSubscription(VisitorId.normalize(visitorId), req.endpoint(), req.p256dh(), req.auth());
+        String userId = authService.requireUser(request).getId();
+        pushService.saveSubscription(userId, req.endpoint(), req.p256dh(), req.auth());
+        preferences.setWebPush(userId, true);
         return Map.of("ok", true);
     }
 
     @DeleteMapping({ "/subscribe", "/unsubscribe" })
-    public Map<String, Boolean> unsubscribe(@RequestHeader(value = "X-Visitor-Id", required = false) String visitorId,
+    public Map<String, Boolean> unsubscribe(HttpServletRequest request,
                                             @RequestBody Map<String, String> body) {
-        pushService.removeSubscription(VisitorId.normalize(visitorId), body.getOrDefault("endpoint", ""));
+        String userId = authService.requireUser(request).getId();
+        boolean hasRemainingDevices = pushService.removeSubscription(
+                userId, body.getOrDefault("endpoint", ""));
+        preferences.setWebPush(userId, hasRemainingDevices);
         return Map.of("ok", true);
     }
 }

@@ -6,6 +6,7 @@ import com.pricechangealert.model.Quote;
 import com.pricechangealert.model.WatchItem;
 import com.pricechangealert.repository.AlertLogRepository;
 import com.pricechangealert.repository.WatchItemRepository;
+import com.pricechangealert.service.notification.NotificationOutboxService;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.Optional;
@@ -21,11 +22,14 @@ public class AlertItemProcessor {
 
     private final WatchItemRepository watchItemRepository;
     private final AlertLogRepository alertLogRepository;
+    private final NotificationOutboxService notificationOutbox;
 
     public AlertItemProcessor(WatchItemRepository watchItemRepository,
-                              AlertLogRepository alertLogRepository) {
+                              AlertLogRepository alertLogRepository,
+                              NotificationOutboxService notificationOutbox) {
         this.watchItemRepository = watchItemRepository;
         this.alertLogRepository = alertLogRepository;
+        this.notificationOutbox = notificationOutbox;
     }
 
     @Transactional
@@ -50,6 +54,7 @@ public class AlertItemProcessor {
             entry.setMessage(message);
             entry.setPrice(quote.price());
             alertLogRepository.save(entry);
+            notificationOutbox.enqueue(item.getOwnerId(), item.getSymbol(), item.getMarket(), message);
 
             item.setLastAlertedAt(Instant.now());
             item.setLastAlertedPrice(quote.price());

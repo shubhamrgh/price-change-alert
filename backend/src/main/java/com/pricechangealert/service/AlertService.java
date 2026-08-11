@@ -3,7 +3,6 @@ package com.pricechangealert.service;
 import com.pricechangealert.model.Quote;
 import com.pricechangealert.model.WatchItem;
 import com.pricechangealert.repository.WatchItemRepository;
-import com.pricechangealert.service.AlertItemProcessor.TriggeredAlert;
 import com.pricechangealert.source.PriceService;
 import java.time.Duration;
 import java.time.Instant;
@@ -27,18 +26,15 @@ public class AlertService {
     private final WatchItemRepository watchItemRepository;
     private final PriceService priceService;
     private final AlertItemProcessor itemProcessor;
-    private final PushService pushService;
     private final Duration maxQuoteAge;
 
     public AlertService(WatchItemRepository watchItemRepository,
                         PriceService priceService,
                         AlertItemProcessor itemProcessor,
-                        PushService pushService,
                         @Value("${price-change-alert.poll.max-quote-age:2m}") Duration maxQuoteAge) {
         this.watchItemRepository = watchItemRepository;
         this.priceService = priceService;
         this.itemProcessor = itemProcessor;
-        this.pushService = pushService;
         this.maxQuoteAge = maxQuoteAge;
     }
 
@@ -59,7 +55,9 @@ public class AlertService {
                     continue;
                 }
                 fetched++;
-                itemProcessor.process(item.getId(), quote.get()).ifPresent(this::sendNotification);
+                itemProcessor.process(item.getId(), quote.get()).ifPresent(alert ->
+                        log.info("ALERT {} {} (watch item paused, delivery queued)",
+                                alert.symbol(), alert.message()));
             } catch (RuntimeException exception) {
                 log.warn("Alert poll failed for watch item {} ({} {})",
                         item.getId(), item.getMarket(), item.getSymbol(), exception);
@@ -73,13 +71,4 @@ public class AlertService {
                 && !quote.fetchedAt().isBefore(Instant.now().minus(maxQuoteAge));
     }
 
-    private void sendNotification(TriggeredAlert alert) {
-        try {
-            pushService.notifyAll(alert.ownerId(), alert.symbol(), alert.market(), alert.message());
-        } catch (RuntimeException exception) {
-            log.warn("Alert was persisted but push delivery failed for {} {}",
-                    alert.market(), alert.symbol(), exception);
-        }
-        log.info("ALERT {} {} (watch item paused)", alert.symbol(), alert.message());
-    }
 }

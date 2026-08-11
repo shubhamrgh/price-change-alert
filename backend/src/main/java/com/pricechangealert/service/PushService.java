@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pricechangealert.model.Market;
 import com.pricechangealert.model.PushSubscription;
 import com.pricechangealert.repository.PushSubscriptionRepository;
+import com.pricechangealert.service.notification.DeliveryResult;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -53,28 +54,34 @@ public class PushService {
         return vapidPublicKeyB64;
     }
 
+    public boolean available() {
+        return webPush != null;
+    }
+
     public void saveSubscription(String ownerId, String endpoint, String p256dh, String auth) {
         PushSubscription sub = repository.findByEndpoint(endpoint).orElseGet(PushSubscription::new);
         sub.setOwnerId(ownerId);
         sub.setEndpoint(endpoint);
         sub.setP256dh(p256dh);
         sub.setAuth(auth);
-        repository.save(sub);
-        log.info("Saved push subscription: {}", endpoint);
+        PushSubscription saved = repository.save(sub);
+        log.info("Saved push subscription {}", saved.getId());
     }
 
     @Transactional
-    public void removeSubscription(String ownerId, String endpoint) {
-        repository.findByEndpoint(endpoint)
-                .filter(sub -> ownerId.equals(sub.getOwnerId()))
+    public boolean removeSubscription(String ownerId, String endpoint) {
+        List<PushSubscription> owned = repository.findAllOwnedBy(ownerId);
+        owned.stream().filter(sub -> endpoint.equals(sub.getEndpoint())).findFirst()
                 .ifPresent(repository::delete);
-        log.info("Removed push subscription: {}", endpoint);
+        boolean hasRemaining = owned.stream().anyMatch(sub -> !endpoint.equals(sub.getEndpoint()));
+        log.info("Removed push subscription; owner still has active devices: {}", hasRemaining);
+        return hasRemaining;
     }
 
-    public void notifyAll(String ownerId, String symbol, Market market, String message) {
-        if (webPush == null) return;
+    public DeliveryResult notifyAll(String ownerId, String symbol, Market market, String message) {
+        if (webPush == null) return DeliveryResult.failed("Web Push is not configured");
         List<PushSubscription> subs = repository.findAllOwnedBy(ownerId);
-        if (subs.isEmpty()) return;
+        if (subs.isEmpty()) return DeliveryResult.failed("No active Web Push subscription");
         String payload;
         try {
             payload = mapper.writeValueAsString(java.util.Map.of(
@@ -85,6 +92,8 @@ public class PushService {
         } catch (Exception e) {
             payload = null;
         }
+        int delivered = 0;
+        boolean transientFailure = false;
         for (PushSubscription sub : subs) {
             try {
                 nl.martijndwars.webpush.Subscription target = new nl.martijndwars.webpush.Subscription(
@@ -92,17 +101,23 @@ public class PushService {
                         new nl.martijndwars.webpush.Subscription.Keys(sub.getP256dh(), sub.getAuth()));
                 Notification notification = new Notification(target, payload);
                 webPush.send(notification);
-                log.info("Push sent to {}", sub.getEndpoint());
+                delivered++;
+                log.info("Push sent to subscription {}", sub.getId());
             } catch (Exception e) {
                 String msg = e.getMessage() == null ? "" : e.getMessage();
                 if (msg.contains("410") || msg.contains("404")) {
-                    log.warn("Subscription expired, removing: {}", sub.getEndpoint());
+                    log.warn("Subscription {} expired, removing", sub.getId());
                     repository.delete(sub);
                 } else {
-                    log.warn("Push failed for {}: {}", sub.getEndpoint(), msg);
+                    transientFailure = true;
+                    log.warn("Push failed for subscription {}: {}", sub.getId(), msg);
                 }
             }
         }
+        if (delivered > 0) return DeliveryResult.sent();
+        return transientFailure
+                ? DeliveryResult.retry("All Web Push endpoints failed temporarily")
+                : DeliveryResult.failed("No valid Web Push subscriptions remain");
     }
 }
 

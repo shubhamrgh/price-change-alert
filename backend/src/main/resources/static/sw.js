@@ -51,7 +51,7 @@ self.addEventListener('fetch', (event) => {
 
 self.addEventListener('push', (event) => {
   let data = { title: 'Price Change Alert', body: '', url: '/#alerts' };
-  try { data = Object.assign(data, event.data ? event.data.json() : {}); } catch (_) {}
+  try { data = Object.assign(data, event.data ? event.data.json() : {}); } catch {}
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,

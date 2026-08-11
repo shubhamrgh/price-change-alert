@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Component } from 'react'
 import { enablePushNotifications, disablePushNotifications, pushReady } from './main.jsx'
-import { visitorHeaders } from './visitor.js'
 
 class ErrorBoundary extends Component {
   constructor(props) {
@@ -98,16 +97,24 @@ function AssetLogo({ market, symbol, className = '' }) {
 async function api(path, options = {}) {
   const res = await fetch(path, {
     ...options,
-    headers: visitorHeaders({ 'Content-Type': 'application/json', ...options.headers }),
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', ...options.headers },
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error(body.error || `Request failed (${res.status})`)
+    const error = new Error(body.error || `Request failed (${res.status})`)
+    error.status = res.status
+    throw error
   }
   return res.status === 204 ? null : res.json()
 }
 
 const THEME_KEY = 'price-change-alert-theme'
+const LEGACY_VISITOR_KEY = 'pca-visitor-id'
+function legacyOwnerId() {
+  if (['localhost', '127.0.0.1'].includes(window.location.hostname)) return 'legacy'
+  return localStorage.getItem(LEGACY_VISITOR_KEY)
+}
 function initialTheme() {
   const saved = localStorage.getItem(THEME_KEY)
   if (saved === 'light' || saved === 'dark') return saved
@@ -115,6 +122,8 @@ function initialTheme() {
 }
 
 export default function App() {
+  const [authUser, setAuthUser] = useState(undefined)
+  const [authLoading, setAuthLoading] = useState(true)
   const [theme, setTheme] = useState(initialTheme)
   const [items, setItems] = useState([])
   const [alerts, setAlerts] = useState([])
@@ -124,6 +133,13 @@ export default function App() {
   const refreshEnabled = useRef(false)
   const refreshRunning = useRef(false)
   const refreshQueued = useRef(false)
+
+  useEffect(() => {
+    api('/api/auth/me')
+      .then(setAuthUser)
+      .catch((e) => { if (e.status !== 401) setError(e.message); setAuthUser(null) })
+      .finally(() => setAuthLoading(false))
+  }, [])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -160,6 +176,7 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    if (!authUser) return undefined
     refreshEnabled.current = true
     const refreshWhenVisible = () => {
       if (!document.hidden) refresh()
@@ -175,7 +192,7 @@ export default function App() {
       document.removeEventListener('visibilitychange', refreshWhenVisible)
       window.removeEventListener('focus', refreshWhenVisible)
     }
-  }, [refresh])
+  }, [refresh, authUser])
 
   const togglePush = async () => {
     setError('')
@@ -209,6 +226,24 @@ export default function App() {
     refresh()
   }
 
+  const logout = async () => {
+    try {
+      await disablePushNotifications().catch(() => {})
+      await api('/api/auth/logout')
+    } finally {
+      window.__pushEnabled = false
+      window.dispatchEvent(new Event('pushstate'))
+      setAuthUser(null)
+    }
+  }
+
+  if (authLoading) {
+    return <div className="app auth-loading"><div className="logo">PC</div><p>Loading your alerts...</p></div>
+  }
+  if (!authUser) {
+    return <AuthScreen onAuthenticated={setAuthUser} theme={theme} setTheme={setTheme} />
+  }
+
   return (
     <div className="app">
       <ErrorBoundary>
@@ -226,9 +261,10 @@ export default function App() {
                    onChange={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
             <span className="tslider"><span className="knob">{theme === 'dark' ? '☾' : '☀'}</span></span>
           </label>
-          <button className={`bell ${notificationOn ? 'on' : ''}`} onClick={togglePush} aria-label="Notifications">
-            {notificationOn ? 'ON' : 'OFF'}
-          </button>
+           <button className={`bell ${notificationOn ? 'on' : ''}`} onClick={togglePush} aria-label="Mobile notifications">
+             {notificationOn ? 'ON' : 'OFF'}
+           </button>
+           <button className="icon-btn" onClick={logout} title={`Log out ${authUser.email}`}>Log out</button>
         </div>
       </header>
 
@@ -237,6 +273,7 @@ export default function App() {
       <nav className="tabs">
         <button className={tab === 'watch' ? 'active' : ''} onClick={() => setTab('watch')}>Watchlist</button>
         <button className={tab === 'alerts' ? 'active' : ''} onClick={() => setTab('alerts')}>Alerts {alerts.length > 0 && <span className="count">{alerts.length}</span>}</button>
+        <button className={tab === 'notifications' ? 'active' : ''} onClick={() => setTab('notifications')}>Notify</button>
       </nav>
 
       {tab === 'watch' ? (
@@ -244,10 +281,126 @@ export default function App() {
           <AddForm onAdded={refresh} />
           <WatchList items={items} onDelete={removeItem} onToggle={setItemActive} />
         </>
-      ) : (
+      ) : tab === 'alerts' ? (
         <AlertList alerts={alerts} onDelete={deleteAlert} onClearAll={clearAlerts} />
+        ) : (
+          <NotificationSettings user={authUser} notificationOn={notificationOn} onTogglePush={togglePush} />
         )}
       </ErrorBoundary>
+    </div>
+  )
+}
+
+function AuthScreen({ onAuthenticated, theme, setTheme }) {
+  const [mode, setMode] = useState('login')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const submit = async (event) => {
+    event.preventDefault()
+    setError('')
+    setBusy(true)
+    try {
+      const user = await api(`/api/auth/${mode === 'login' ? 'login' : 'register'}`, {
+        method: 'POST', body: JSON.stringify({ email, password, legacyOwnerId: legacyOwnerId() }),
+      })
+      onAuthenticated(user)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="app auth-shell">
+      <header className="header">
+        <div className="brand"><span className="logo">PC</span><div><h1>Price Change Alert</h1><p>NSE · BSE · Crypto</p></div></div>
+        <label className="theme-switch" title="Toggle theme">
+          <input type="checkbox" checked={theme === 'dark'} onChange={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
+          <span className="tslider"><span className="knob">{theme === 'dark' ? '☾' : '☀'}</span></span>
+        </label>
+      </header>
+      <form className="card auth-card" onSubmit={submit}>
+        <h2>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h2>
+        <p className="auth-copy">Sign in to keep your watchlist synced and choose where price alerts reach you.</p>
+        <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required /></label>
+        <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required /></label>
+        {error && <div className="banner error">{error}</div>}
+        <button className="primary" disabled={busy}>{busy ? 'Please wait...' : mode === 'login' ? 'Log in' : 'Create account'}</button>
+        <button className="auth-switch" type="button" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError('') }}>
+          {mode === 'login' ? 'New here? Create an account' : 'Already have an account? Log in'}
+        </button>
+      </form>
+    </div>
+  )
+}
+
+function NotificationSettings({ user, notificationOn, onTogglePush }) {
+  const [channels, setChannels] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  const refresh = useCallback(() => {
+    setLoading(true)
+    api('/api/notification-preferences')
+      .then(setChannels)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => { refresh() }, [refresh, notificationOn])
+
+  const update = async (channel, enabled, destination) => {
+    setError('')
+    try {
+      const next = await api(`/api/notification-preferences/${channel}`, {
+        method: 'PUT', body: JSON.stringify({ enabled, destination }),
+      })
+      setChannels((current) => current.map((item) => item.channel === channel ? next : item))
+    } catch (e) { setError(e.message) }
+  }
+
+  return (
+    <section className="notification-settings">
+      <div className="card settings-intro"><h2>Notification channels</h2><p>Choose one or more destinations. Every alert is delivered independently, with automatic retries for temporary outages.</p></div>
+      {error && <div className="banner error">{error}</div>}
+      {loading ? <div className="hint">Loading channels...</div> : channels.map((channel) => (
+        <NotificationChannelCard key={channel.channel} channel={channel} user={user} onUpdate={update} onTogglePush={onTogglePush} notificationOn={notificationOn} />
+      ))}
+    </section>
+  )
+}
+
+function NotificationChannelCard({ channel, user, onUpdate, onTogglePush, notificationOn }) {
+  const [destination, setDestination] = useState(channel.destination || '')
+  const [busy, setBusy] = useState(false)
+  useEffect(() => setDestination(channel.destination || ''), [channel.destination])
+  const isPush = channel.channel === 'WEB_PUSH'
+  const label = { WEB_PUSH: 'Mobile / browser', EMAIL: 'Email', TELEGRAM: 'Telegram', DISCORD: 'Discord' }[channel.channel]
+  const description = {
+    WEB_PUSH: 'Instant notifications on your phone or desktop browser.',
+    EMAIL: `Alerts will be sent to ${user.email}.`,
+    TELEGRAM: 'Enter the chat ID after starting the configured Telegram bot.',
+    DISCORD: 'Paste an HTTPS incoming webhook URL for your Discord channel.',
+  }[channel.channel]
+
+  const save = async (enabled) => {
+    setBusy(true)
+    try { await onUpdate(channel.channel, enabled, destination) } finally { setBusy(false) }
+  }
+
+  return (
+    <div className={`card channel-card ${!channel.available ? 'unavailable' : ''}`}>
+      <div className="channel-heading"><div><h3>{label}</h3><p>{description}</p></div><span className={`channel-status ${channel.enabled ? 'enabled' : ''}`}>{channel.enabled ? 'Enabled' : 'Off'}</span></div>
+      {!isPush && channel.channel !== 'EMAIL' && <input value={destination} onChange={(e) => setDestination(e.target.value)} placeholder={channel.channel === 'TELEGRAM' ? 'Chat ID or @channel' : 'https://discord.com/api/webhooks/...'} disabled={!channel.available || busy} />}
+      <div className="channel-actions">
+        {isPush ? <button className={`ghost ${notificationOn ? 'active-action' : ''}`} onClick={onTogglePush} disabled={!channel.available}>{notificationOn ? 'Turn off mobile notifications' : 'Enable mobile notifications'}</button> :
+          <button className="ghost" onClick={() => save(!channel.enabled)} disabled={!channel.available || busy}>{channel.enabled ? 'Disable' : 'Enable'}</button>}
+      </div>
+      {!channel.available && <p className="channel-help">{channel.help}</p>}
     </div>
   )
 }
