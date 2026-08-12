@@ -3,6 +3,8 @@ services:
     name: price-change-alert
     runtime: docker
     plan: free
+    branch: main
+    autoDeployTrigger: commit
     dockerfilePath: ./Dockerfile
     healthCheckPath: /actuator/health/liveness
     envVars:
