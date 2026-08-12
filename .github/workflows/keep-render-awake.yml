@@ -1,0 +1,17 @@
+name: Keep Render service awake
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check application liveness
+        run: curl --fail --silent --show-error --max-time 90 --retry 2 --retry-delay 5 https://price-change-alert.onrender.com/actuator/health/liveness

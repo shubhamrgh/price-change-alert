@@ -164,7 +164,7 @@ threshold tag, and period change % (computed from the chart's first/last point).
 
 | Host | Free tier | Notes |
 |------|-----------|-------|
-| **Render** | 750 h/mo, spins down after 15 min idle | Use `render.yaml` below; sleep kills alerts — wake it once an hour (cron hitting the URL) or upgrade to $7 starter |
+| **Render** | 750 h/mo, spins down after 15 min idle | Use `render.yaml` below; sleep kills alerts, so ping it more often than every 15 minutes or use a paid instance |
 | **Railway** | 500 h/mo trial credit | Good for testing; needs card |
 | **Fly.io** | ~3 free VMs | 24/7 free small machine — best for always-on alerts |
 | **Oracle Cloud Always Free** | 2 free ARM VMs (24 GB RAM) | Real 24/7 VPS, installs Java + jar directly; most reliable free option |
@@ -178,7 +178,9 @@ Steps (Render, ~10 min):
 1. Push this repo to GitHub (git init, add, commit, push).
 2. On Render: New -> Web Service -> connect the repo -> pick the `Dockerfile`/render.yaml.
 3. Deploy. Your URL `https://price-change-alert.onrender.com` gets HTTPS automatically.
-4. Open it on your phone, Add to Home screen, allow notifications -> done.
+4. Keep GitHub Actions enabled. `.github/workflows/keep-render-awake.yml` checks the
+   liveness endpoint every 10 minutes as a best-effort way to keep the free service warm.
+5. Open it on your phone, Add to Home screen, allow notifications -> done.
 
 Local Docker build check: `docker build -t price-change-alert .` (`render.yaml` + `Dockerfile` included).
 
