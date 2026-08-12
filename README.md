@@ -179,8 +179,9 @@ Steps (Render, ~10 min):
 2. On Render: New -> Web Service -> connect the repo -> pick the `Dockerfile`/render.yaml.
 3. Deploy. Your URL `https://price-change-alert.onrender.com` gets HTTPS automatically.
 4. Keep GitHub Actions enabled. `.github/workflows/keep-render-awake.yml` checks the
-   liveness endpoint every 5 minutes. While the service is running, it also calls its
-   public liveness URL every 8 minutes, so either mechanism can cover a delayed request.
+   liveness endpoint every 5 minutes as an external wake-up request. Render can still
+   delay scheduled GitHub jobs; guaranteed 24/7 alert polling requires a paid Render
+   instance or another always-on host.
 5. Open it on your phone, Add to Home screen, allow notifications -> done.
 
 Local Docker build check: `docker build -t price-change-alert .` (`render.yaml` + `Dockerfile` included).
