@@ -28,6 +28,14 @@ services:
         value: mailto:alerts@price-change-alert.app
       - key: PRICE_CHANGE_ALERT_BASE_URL
         sync: false
+      - key: PRICE_CHANGE_ALERT_KEEP_ALIVE_ENABLED
+        value: "true"
+      - key: PRICE_CHANGE_ALERT_KEEP_ALIVE_URL
+        value: https://price-change-alert.onrender.com/actuator/health/liveness
+      - key: PRICE_CHANGE_ALERT_KEEP_ALIVE_INITIAL_DELAY_MS
+        value: "120000"
+      - key: PRICE_CHANGE_ALERT_KEEP_ALIVE_INTERVAL_MS
+        value: "480000"
       - key: PRICE_CHANGE_ALERT_EMAIL_ENABLED
         value: "false"
       - key: PRICE_CHANGE_ALERT_EMAIL_FROM
