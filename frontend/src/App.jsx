@@ -1,5 +1,19 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Component } from 'react'
+import {
+  ArrowRight,
+  BellRing,
+  Check,
+  Eye,
+  EyeOff,
+  LockKeyhole,
+  Mail,
+  Moon,
+  ShieldCheck,
+  Sun,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react'
 import { enablePushNotifications, disablePushNotifications, pushReady } from './main.jsx'
 
 class ErrorBoundary extends Component {
@@ -295,8 +309,17 @@ function AuthScreen({ onAuthenticated, theme, setTheme }) {
   const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+
+  const changeMode = (nextMode) => {
+    if (busy || nextMode === mode) return
+    setMode(nextMode)
+    setPassword('')
+    setShowPassword(false)
+    setError('')
+  }
 
   const submit = async (event) => {
     event.preventDefault()
@@ -315,26 +338,173 @@ function AuthScreen({ onAuthenticated, theme, setTheme }) {
   }
 
   return (
-    <div className="app auth-shell">
-      <header className="header">
-        <div className="brand"><span className="logo">PC</span><div><h1>Price Change Alert</h1><p>NSE · BSE · Crypto</p></div></div>
-        <label className="theme-switch" title="Toggle theme">
-          <input type="checkbox" checked={theme === 'dark'} onChange={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
-          <span className="tslider"><span className="knob">{theme === 'dark' ? '☾' : '☀'}</span></span>
-        </label>
-      </header>
-      <form className="card auth-card" onSubmit={submit}>
-        <h2>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h2>
-        <p className="auth-copy">Sign in to keep your watchlist synced and choose where price alerts reach you.</p>
-        <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required /></label>
-        <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required /></label>
-        {error && <div className="banner error">{error}</div>}
-        <button className="primary" disabled={busy}>{busy ? 'Please wait...' : mode === 'login' ? 'Log in' : 'Create account'}</button>
-        <button className="auth-switch" type="button" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError('') }}>
-          {mode === 'login' ? 'New here? Create an account' : 'Already have an account? Log in'}
+    <main className="auth-shell">
+      <header className="auth-topbar">
+        <div className="auth-brand">
+          <span className="auth-logo" aria-hidden="true"><BellRing size={19} strokeWidth={2.2} /></span>
+          <div>
+            <strong>Price Change Alert</strong>
+            <span>NSE / BSE / Crypto</span>
+          </div>
+        </div>
+        <button
+          className="auth-icon-button"
+          type="button"
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          aria-label={`Use ${theme === 'dark' ? 'light' : 'dark'} theme`}
+          title={`Use ${theme === 'dark' ? 'light' : 'dark'} theme`}
+        >
+          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </button>
-      </form>
-    </div>
+      </header>
+
+      <div className="auth-stage">
+        <section className="auth-market" aria-label="Market alert preview">
+          <div className="auth-market-copy">
+            <span className="market-live"><i /> Markets monitored live</span>
+            <h1>Price Change Alert</h1>
+            <p>Keep every move that matters in one focused watchlist.</p>
+          </div>
+
+          <div className="market-window">
+            <div className="market-window-bar">
+              <div>
+                <span className="market-window-title">Watchlist</span>
+                <span className="market-window-status"><i /> Live</span>
+              </div>
+              <span className="market-window-time">09:41</span>
+            </div>
+
+            <div className="market-focus">
+              <div className="market-focus-head">
+                <div className="market-symbol">
+                  <span className="market-symbol-mark">B</span>
+                  <div><strong>BTC</strong><span>Bitcoin</span></div>
+                </div>
+                <span className="market-change positive"><TrendingUp size={14} /> 4.18%</span>
+              </div>
+              <div className="market-price-row">
+                <strong>$67,842.10</strong>
+                <span>+$2,716.42 today</span>
+              </div>
+              <div className="market-chart" aria-hidden="true">
+                <svg viewBox="0 0 520 170" preserveAspectRatio="none">
+                  <defs>
+                    <linearGradient id="authChartFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="currentColor" stopOpacity="0.28" />
+                      <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <path className="market-chart-fill" d="M0,145 C35,133 54,144 83,118 C112,92 135,108 166,96 C198,83 214,101 247,72 C280,43 308,67 337,52 C367,36 392,49 420,28 C452,5 477,28 520,12 L520,170 L0,170 Z" />
+                  <path className="market-chart-line" d="M0,145 C35,133 54,144 83,118 C112,92 135,108 166,96 C198,83 214,101 247,72 C280,43 308,67 337,52 C367,36 392,49 420,28 C452,5 477,28 520,12" />
+                </svg>
+                <span className="market-chart-pulse" />
+              </div>
+            </div>
+
+            <div className="market-rows">
+              <div className="market-row">
+                <span className="market-row-icon reliance">R</span>
+                <div><strong>RELIANCE</strong><span>NSE</span></div>
+                <div className="market-row-price"><strong>INR 1,402.30</strong><span className="positive"><TrendingUp size={12} /> 1.26%</span></div>
+              </div>
+              <div className="market-row">
+                <span className="market-row-icon nifty">50</span>
+                <div><strong>NIFTY 50</strong><span>NSE Index</span></div>
+                <div className="market-row-price"><strong>24,334.20</strong><span className="negative"><TrendingDown size={12} /> 0.31%</span></div>
+              </div>
+            </div>
+
+            <div className="market-alert-toast">
+              <span><BellRing size={16} /></span>
+              <div><strong>Target crossed</strong><small>BTC moved above $67,500</small></div>
+              <i><Check size={13} /></i>
+            </div>
+          </div>
+        </section>
+
+        <section className="auth-panel">
+          <div className="auth-mode" role="tablist" aria-label="Account access">
+            <span className={mode === 'register' ? 'register' : ''} aria-hidden="true" />
+            <button type="button" role="tab" aria-selected={mode === 'login'} onClick={() => changeMode('login')}>Sign in</button>
+            <button type="button" role="tab" aria-selected={mode === 'register'} onClick={() => changeMode('register')}>Create account</button>
+          </div>
+
+          <form className={`auth-form auth-form-${mode}`} onSubmit={submit} key={mode}>
+            <div className="auth-heading">
+              <span className="auth-eyebrow">{mode === 'login' ? 'Account access' : 'Start your watchlist'}</span>
+              <h2>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h2>
+              <p>{mode === 'login' ? 'Enter your details to open your watchlist.' : 'One account keeps your alerts synced across devices.'}</p>
+            </div>
+
+            <div className="auth-fields">
+              <label className="auth-field">
+                <span>Email address</span>
+                <div className="auth-input-wrap">
+                  <Mail size={18} aria-hidden="true" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    autoComplete="email"
+                    placeholder="you@example.com"
+                    disabled={busy}
+                    required
+                  />
+                </div>
+              </label>
+
+              <label className="auth-field">
+                <span>Password</span>
+                <div className="auth-input-wrap">
+                  <LockKeyhole size={18} aria-hidden="true" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    minLength={8}
+                    maxLength={128}
+                    autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                    placeholder={mode === 'login' ? 'Enter your password' : 'At least 8 characters'}
+                    disabled={busy}
+                    required
+                  />
+                  <button
+                    className="password-toggle"
+                    type="button"
+                    onClick={() => setShowPassword((current) => !current)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </label>
+            </div>
+
+            {mode === 'register' && (
+              <div className={`password-rule ${password.length >= 8 ? 'valid' : ''}`} aria-live="polite">
+                <span><Check size={12} /></span>
+                Use 8 or more characters
+              </div>
+            )}
+
+            {error && <div className="auth-error" role="alert">{error}</div>}
+
+            <button className="auth-submit" disabled={busy}>
+              <span>{busy ? 'Please wait' : mode === 'login' ? 'Sign in' : 'Create account'}</span>
+              {busy ? <i className="auth-spinner" aria-hidden="true" /> : <ArrowRight size={18} />}
+            </button>
+
+            <div className="auth-session-note">
+              <ShieldCheck size={16} />
+              <span>Protected with an encrypted, HttpOnly session.</span>
+            </div>
+          </form>
+        </section>
+      </div>
+    </main>
   )
 }
 
