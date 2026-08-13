@@ -6,10 +6,12 @@ import {
   Check,
   Eye,
   EyeOff,
+  KeyRound,
   LockKeyhole,
   Mail,
   Moon,
   ShieldCheck,
+  Send,
   Sun,
   TrendingDown,
   TrendingUp,
@@ -134,6 +136,24 @@ function initialTheme() {
   if (saved === 'light' || saved === 'dark') return saved
   return 'light'
 }
+
+const fromBase64Url = (value) => {
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - value.length % 4) % 4)
+  return Uint8Array.from(atob(base64), (character) => character.charCodeAt(0))
+}
+const toBase64Url = (value) => {
+  const bytes = value instanceof ArrayBuffer ? new Uint8Array(value) : new Uint8Array(value.buffer, value.byteOffset, value.byteLength)
+  let binary = ''
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte) })
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+const credentialOptions = (options) => ({
+  ...options,
+  challenge: fromBase64Url(options.challenge),
+  user: options.user ? { ...options.user, id: fromBase64Url(options.user.id) } : undefined,
+  allowCredentials: options.allowCredentials?.map((item) => ({ ...item, id: fromBase64Url(item.id) })),
+  excludeCredentials: options.excludeCredentials?.map((item) => ({ ...item, id: fromBase64Url(item.id) })),
+})
 
 export default function App() {
   const [authUser, setAuthUser] = useState(undefined)
@@ -311,7 +331,63 @@ function AuthScreen({ onAuthenticated, theme, setTheme }) {
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
+  const [config, setConfig] = useState({ google: false, emailLinks: false, passkeys: false })
+  const googleButton = useRef(null)
+
+  useEffect(() => {
+    api('/api/auth/config').then(setConfig).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const magicToken = params.get('magicToken')
+    const resetToken = params.get('resetToken')
+    if (resetToken) setMode('reset')
+    if (!magicToken) return
+    setBusy(true)
+    api('/api/auth/magic-link/consume', {
+      method: 'POST', body: JSON.stringify({ token: magicToken, legacyOwnerId: legacyOwnerId() }),
+    }).then((user) => {
+      window.history.replaceState({}, '', window.location.pathname)
+      onAuthenticated(user)
+    }).catch((e) => setError(e.message)).finally(() => setBusy(false))
+  }, [onAuthenticated])
+
+  useEffect(() => {
+    if (!config.google || !config.googleClientId || !googleButton.current) return undefined
+    const render = () => {
+      if (!window.google?.accounts?.id || !googleButton.current) return
+      googleButton.current.replaceChildren()
+      window.google.accounts.id.initialize({
+        client_id: config.googleClientId,
+        callback: async ({ credential }) => {
+          setError(''); setMessage(''); setBusy(true)
+          try {
+            const user = await api('/api/auth/google', {
+              method: 'POST', body: JSON.stringify({ credential, legacyOwnerId: legacyOwnerId() }),
+            })
+            onAuthenticated(user)
+          } catch (e) { setError(e.message) } finally { setBusy(false) }
+        },
+      })
+      window.google.accounts.id.renderButton(googleButton.current, {
+        theme: theme === 'dark' ? 'filled_black' : 'outline', size: 'large', width: 320, text: 'continue_with',
+      })
+    }
+    if (window.google?.accounts?.id) { render(); return undefined }
+    let script = document.querySelector('script[data-google-identity]')
+    if (!script) {
+      script = document.createElement('script')
+      script.src = 'https://accounts.google.com/gsi/client'
+      script.async = true
+      script.dataset.googleIdentity = 'true'
+      document.head.appendChild(script)
+    }
+    script.addEventListener('load', render)
+    return () => script.removeEventListener('load', render)
+  }, [config, onAuthenticated, theme])
 
   const changeMode = (nextMode) => {
     if (busy || nextMode === mode) return
@@ -319,23 +395,70 @@ function AuthScreen({ onAuthenticated, theme, setTheme }) {
     setPassword('')
     setShowPassword(false)
     setError('')
+    setMessage('')
   }
 
   const submit = async (event) => {
     event.preventDefault()
     setError('')
+    setMessage('')
     setBusy(true)
     try {
-      const user = await api(`/api/auth/${mode === 'login' ? 'login' : 'register'}`, {
-        method: 'POST', body: JSON.stringify({ email, password, legacyOwnerId: legacyOwnerId() }),
-      })
-      onAuthenticated(user)
+      if (mode === 'magic' || mode === 'forgot') {
+        const result = await api(`/api/auth/${mode === 'magic' ? 'magic-link' : 'password-reset'}/request`, {
+          method: 'POST', body: JSON.stringify({ email }),
+        })
+        setMessage(result.message)
+      } else if (mode === 'reset') {
+        const token = new URLSearchParams(window.location.search).get('resetToken')
+        const result = await api('/api/auth/password-reset/consume', {
+          method: 'POST', body: JSON.stringify({ token, password }),
+        })
+        window.history.replaceState({}, '', window.location.pathname)
+        setMessage(result.message)
+        setMode('login')
+        setPassword('')
+      } else {
+        const user = await api(`/api/auth/${mode === 'login' ? 'login' : 'register'}`, {
+          method: 'POST', body: JSON.stringify({ email, password, legacyOwnerId: legacyOwnerId() }),
+        })
+        onAuthenticated(user)
+      }
     } catch (e) {
       setError(e.message)
     } finally {
       setBusy(false)
     }
   }
+
+  const loginWithPasskey = async () => {
+    setError(''); setMessage(''); setBusy(true)
+    try {
+      if (!window.PublicKeyCredential || !navigator.credentials) throw new Error('Passkeys are not supported in this browser')
+      if (!email) throw new Error('Enter your email address first')
+      const options = await api('/api/auth/passkeys/login/options', {
+        method: 'POST', body: JSON.stringify({ email }),
+      })
+      const credential = await navigator.credentials.get({ publicKey: credentialOptions(options.publicKey) })
+      const body = {
+        challengeId: options.challengeId,
+        rawId: toBase64Url(credential.rawId),
+        clientDataJSON: toBase64Url(credential.response.clientDataJSON),
+        authenticatorData: toBase64Url(credential.response.authenticatorData),
+        signature: toBase64Url(credential.response.signature),
+      }
+      const owner = legacyOwnerId()
+      const user = await api(`/api/auth/passkeys/login/finish${owner ? `?legacyOwnerId=${encodeURIComponent(owner)}` : ''}`, {
+        method: 'POST', body: JSON.stringify(body),
+      })
+      onAuthenticated(user)
+    } catch (e) {
+      setError(e.name === 'NotAllowedError' ? 'Passkey sign-in was cancelled' : e.message)
+    } finally { setBusy(false) }
+  }
+
+  const emailOnly = mode === 'magic' || mode === 'forgot'
+  const resetMode = mode === 'reset'
 
   return (
     <main className="auth-shell">
@@ -432,13 +555,16 @@ function AuthScreen({ onAuthenticated, theme, setTheme }) {
 
           <form className={`auth-form auth-form-${mode}`} onSubmit={submit} key={mode}>
             <div className="auth-heading">
-              <span className="auth-eyebrow">{mode === 'login' ? 'Account access' : 'Start your watchlist'}</span>
-              <h2>{mode === 'login' ? 'Welcome back' : 'Create your account'}</h2>
-              <p>{mode === 'login' ? 'Enter your details to open your watchlist.' : 'One account keeps your alerts synced across devices.'}</p>
+              <span className="auth-eyebrow">{mode === 'register' ? 'Start your watchlist' : resetMode ? 'Account recovery' : 'Account access'}</span>
+              <h2>{mode === 'register' ? 'Create your account' : mode === 'magic' ? 'Email me a sign-in link' : mode === 'forgot' ? 'Reset your password' : resetMode ? 'Choose a new password' : 'Welcome back'}</h2>
+              <p>{mode === 'register' ? 'One account keeps your alerts synced across devices.' : emailOnly ? 'We will send a secure, single-use link to your inbox.' : resetMode ? 'Use at least eight characters for your new password.' : 'Choose the fastest way back to your watchlist.'}</p>
             </div>
 
+            {mode === 'login' && config.google && <div ref={googleButton} className="google-signin" aria-label="Continue with Google" />}
+            {mode === 'login' && config.google && <div className="auth-divider"><span>or</span></div>}
+
             <div className="auth-fields">
-              <label className="auth-field">
+              {!resetMode && <label className="auth-field">
                 <span>Email address</span>
                 <div className="auth-input-wrap">
                   <Mail size={18} aria-hidden="true" />
@@ -452,9 +578,9 @@ function AuthScreen({ onAuthenticated, theme, setTheme }) {
                     required
                   />
                 </div>
-              </label>
+              </label>}
 
-              <label className="auth-field">
+              {!emailOnly && <label className="auth-field">
                 <span>Password</span>
                 <div className="auth-input-wrap">
                   <LockKeyhole size={18} aria-hidden="true" />
@@ -480,10 +606,10 @@ function AuthScreen({ onAuthenticated, theme, setTheme }) {
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
-              </label>
+              </label>}
             </div>
 
-            {mode === 'register' && (
+            {(mode === 'register' || resetMode) && (
               <div className={`password-rule ${password.length >= 8 ? 'valid' : ''}`} aria-live="polite">
                 <span><Check size={12} /></span>
                 Use 8 or more characters
@@ -491,11 +617,19 @@ function AuthScreen({ onAuthenticated, theme, setTheme }) {
             )}
 
             {error && <div className="auth-error" role="alert">{error}</div>}
+            {message && <div className="auth-success" role="status">{message}</div>}
 
             <button className="auth-submit" disabled={busy}>
-              <span>{busy ? 'Please wait' : mode === 'login' ? 'Sign in' : 'Create account'}</span>
-              {busy ? <i className="auth-spinner" aria-hidden="true" /> : <ArrowRight size={18} />}
+              <span>{busy ? 'Please wait' : mode === 'login' ? 'Sign in' : mode === 'register' ? 'Create account' : resetMode ? 'Update password' : 'Send secure link'}</span>
+              {busy ? <i className="auth-spinner" aria-hidden="true" /> : emailOnly ? <Send size={17} /> : <ArrowRight size={18} />}
             </button>
+
+            {mode === 'login' && config.passkeys && <button className="auth-secondary" type="button" onClick={loginWithPasskey} disabled={busy}><KeyRound size={17} /> Sign in with a passkey</button>}
+            {mode === 'login' && <div className="auth-links">
+              {config.emailLinks && <button type="button" onClick={() => changeMode('magic')}>Email me a sign-in link</button>}
+              {config.emailLinks && <button type="button" onClick={() => changeMode('forgot')}>Forgot password?</button>}
+            </div>}
+            {(emailOnly || resetMode) && <button className="auth-back" type="button" onClick={() => changeMode('login')}>Back to sign in</button>}
 
             <div className="auth-session-note">
               <ShieldCheck size={16} />
@@ -540,7 +674,66 @@ function NotificationSettings({ user, notificationOn, onTogglePush }) {
       {loading ? <div className="hint">Loading channels...</div> : channels.map((channel) => (
         <NotificationChannelCard key={channel.channel} channel={channel} user={user} onUpdate={update} onTogglePush={onTogglePush} notificationOn={notificationOn} />
       ))}
+      <PasskeySettings />
     </section>
+  )
+}
+
+function PasskeySettings() {
+  const [passkeys, setPasskeys] = useState([])
+  const [available, setAvailable] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  const refresh = useCallback(() => {
+    api('/api/auth/config').then((value) => {
+      const supported = value.passkeys && Boolean(window.PublicKeyCredential && navigator.credentials)
+      setAvailable(supported)
+      if (supported) return api('/api/auth/passkeys').then(setPasskeys)
+      return undefined
+    }).catch((e) => setError(e.message))
+  }, [])
+
+  useEffect(() => { refresh() }, [refresh])
+
+  const addPasskey = async () => {
+    setError(''); setBusy(true)
+    try {
+      const options = await api('/api/auth/passkeys/register/options', { method: 'POST' })
+      const credential = await navigator.credentials.create({ publicKey: credentialOptions(options.publicKey) })
+      const response = credential.response
+      await api('/api/auth/passkeys/register/finish', {
+        method: 'POST', body: JSON.stringify({
+          challengeId: options.challengeId,
+          rawId: toBase64Url(credential.rawId),
+          clientDataJSON: toBase64Url(response.clientDataJSON),
+          attestationObject: toBase64Url(response.attestationObject),
+          transports: response.getTransports?.() || [],
+          name: `Passkey ${passkeys.length + 1}`,
+        }),
+      })
+      refresh()
+    } catch (e) {
+      setError(e.name === 'NotAllowedError' ? 'Passkey setup was cancelled' : e.message)
+    } finally { setBusy(false) }
+  }
+
+  const removePasskey = async (id) => {
+    setError(''); setBusy(true)
+    try {
+      await api(`/api/auth/passkeys/${id}`, { method: 'DELETE' })
+      setPasskeys((current) => current.filter((item) => item.id !== id))
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+
+  return (
+    <div className={`card channel-card ${available ? '' : 'unavailable'}`}>
+      <div className="channel-heading"><div><h3>Passkeys</h3><p>Use your fingerprint, face, screen lock, or security key for phishing-resistant sign-in.</p></div><span className={`channel-status ${passkeys.length ? 'enabled' : ''}`}>{passkeys.length ? `${passkeys.length} saved` : 'Off'}</span></div>
+      {passkeys.map((passkey) => <div className="passkey-row" key={passkey.id}><span><KeyRound size={16} />{passkey.name}</span><button className="ghost danger" type="button" disabled={busy} onClick={() => removePasskey(passkey.id)}>Remove</button></div>)}
+      {error && <p className="channel-help">{error}</p>}
+      <div className="channel-actions"><button className="ghost" type="button" onClick={addPasskey} disabled={!available || busy}>{busy ? 'Please wait...' : 'Add a passkey'}</button></div>
+      {!available && <p className="channel-help">Passkeys require HTTPS and a supported browser.</p>}
+    </div>
   )
 }
 

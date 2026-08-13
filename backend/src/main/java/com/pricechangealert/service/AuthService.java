@@ -20,6 +20,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -27,6 +28,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.reactive.function.client.WebClient;
 
 @Service
 public class AuthService {
@@ -37,18 +39,47 @@ public class AuthService {
     private final UserAccountRepository users;
     private final UserSessionRepository sessions;
     private final LegacyOwnershipMigrationService legacyOwnership;
+    private final AuthTokenService authTokens;
+    private final AuthMailService authMail;
+    private final WebClient webClient;
     private final BCryptPasswordEncoder passwords = new BCryptPasswordEncoder(12);
     private final SecureRandom random = new SecureRandom();
     private final Duration sessionTtl;
+    private final Duration magicLinkTtl;
+    private final Duration resetTtl;
+    private final String baseUrl;
+    private final String googleClientId;
 
+    AuthService(UserAccountRepository users,
+                UserSessionRepository sessions,
+                LegacyOwnershipMigrationService legacyOwnership,
+                Duration sessionTtl) {
+        this(users, sessions, legacyOwnership, null, null, sessionTtl,
+                Duration.ofMinutes(15), Duration.ofMinutes(30), "http://localhost:8080", "");
+    }
+
+    @Autowired
     public AuthService(UserAccountRepository users,
                        UserSessionRepository sessions,
                        LegacyOwnershipMigrationService legacyOwnership,
-                       @Value("${price-change-alert.auth.session-ttl:30d}") Duration sessionTtl) {
+                       AuthTokenService authTokens,
+                       AuthMailService authMail,
+                       @Value("${price-change-alert.auth.session-ttl:30d}") Duration sessionTtl,
+                       @Value("${price-change-alert.auth.magic-link-ttl:15m}") Duration magicLinkTtl,
+                       @Value("${price-change-alert.auth.password-reset-ttl:30m}") Duration resetTtl,
+                       @Value("${price-change-alert.base-url:http://localhost:8080}") String baseUrl,
+                       @Value("${price-change-alert.auth.google.client-id:}") String googleClientId) {
         this.users = users;
         this.sessions = sessions;
         this.legacyOwnership = legacyOwnership;
+        this.authTokens = authTokens;
+        this.authMail = authMail;
+        this.webClient = WebClient.builder().build();
         this.sessionTtl = sessionTtl;
+        this.magicLinkTtl = magicLinkTtl;
+        this.resetTtl = resetTtl;
+        this.baseUrl = baseUrl.replaceAll("/+$", "");
+        this.googleClientId = googleClientId == null ? "" : googleClientId.trim();
     }
 
     @Transactional
@@ -76,12 +107,140 @@ public class AuthService {
                              HttpServletResponse response) {
         String normalizedEmail = validateEmail(email);
         UserAccount account = users.findByEmailIgnoreCase(normalizedEmail)
-                .filter(user -> passwords.matches(password == null ? "" : password, user.getPasswordHash()))
+                .filter(user -> user.getPasswordHash() != null
+                        && passwords.matches(password == null ? "" : password, user.getPasswordHash()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED,
                         "Invalid email or password"));
         legacyOwnership.claim(legacyOwnerId, account.getId());
         createSession(account.getId(), request, response);
         return account;
+    }
+
+    @Transactional
+    public void requestMagicLink(String email) {
+        String normalizedEmail = validateEmail(email);
+        if (authTokens == null || authMail == null || !authMail.available()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Email sign-in is not configured");
+        }
+        String raw = authTokens.create(normalizedEmail, com.pricechangealert.model.AuthToken.Type.MAGIC_LOGIN,
+                magicLinkTtl);
+        authMail.sendMagicLink(normalizedEmail, baseUrl + "/?magicToken=" + raw);
+    }
+
+    @Transactional
+    public UserAccount consumeMagicLink(String rawToken, String legacyOwnerId,
+                                         HttpServletRequest request, HttpServletResponse response) {
+        if (authTokens == null) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "Magic-link sign-in is not configured");
+        String email = authTokens.consume(rawToken, com.pricechangealert.model.AuthToken.Type.MAGIC_LOGIN)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "This sign-in link is invalid or expired"));
+        UserAccount account = users.findByEmailIgnoreCase(email).orElseGet(() -> {
+            UserAccount created = new UserAccount();
+            created.setId(UUID.randomUUID().toString());
+            created.setEmail(email);
+            created.setPasswordHash(unusablePasswordHash());
+            return created;
+        });
+        users.save(account);
+        legacyOwnership.claim(legacyOwnerId, account.getId());
+        createSession(account.getId(), request, response);
+        return account;
+    }
+
+    @Transactional
+    public void requestPasswordReset(String email) {
+        String normalizedEmail = validateEmail(email);
+        if (authTokens == null || authMail == null || !authMail.available()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Password reset is not configured");
+        }
+        if (users.findByEmailIgnoreCase(normalizedEmail).isEmpty()) return;
+        String raw = authTokens.create(normalizedEmail, com.pricechangealert.model.AuthToken.Type.PASSWORD_RESET,
+                resetTtl);
+        authMail.sendPasswordReset(normalizedEmail, baseUrl + "/?resetToken=" + raw);
+    }
+
+    @Transactional
+    public void resetPassword(String rawToken, String newPassword) {
+        validatePassword(newPassword);
+        if (authTokens == null) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "Password reset is not configured");
+        String email = authTokens.consume(rawToken, com.pricechangealert.model.AuthToken.Type.PASSWORD_RESET)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "This password-reset link is invalid or expired"));
+        UserAccount account = users.findByEmailIgnoreCase(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "This password-reset link is invalid or expired"));
+        account.setPasswordHash(passwords.encode(newPassword));
+        users.save(account);
+        sessions.deleteByUserId(account.getId());
+    }
+
+    @Transactional
+    public UserAccount googleLogin(String idToken, String legacyOwnerId,
+                                   HttpServletRequest request, HttpServletResponse response) {
+        if (googleClientId.isBlank()) throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "Google sign-in is not configured");
+        if (idToken == null || idToken.isBlank()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Google sign-in token is required");
+        GoogleIdentity identity;
+        try {
+            identity = webClient.get().uri(uriBuilder -> uriBuilder
+                            .scheme("https").host("oauth2.googleapis.com").path("/tokeninfo")
+                            .queryParam("id_token", idToken).build())
+                    .retrieve().bodyToMono(GoogleIdentity.class).block(Duration.ofSeconds(8));
+        } catch (RuntimeException exception) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Google sign-in could not be verified");
+        }
+        if (identity == null || !googleClientId.equals(identity.aud())
+                || !"true".equalsIgnoreCase(identity.email_verified())
+                || identity.email() == null || identity.sub() == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Google sign-in could not be verified");
+        }
+        String email = validateEmail(identity.email());
+        UserAccount account = users.findByGoogleSubject(identity.sub())
+                .or(() -> users.findByEmailIgnoreCase(email))
+                .orElseGet(() -> {
+                    UserAccount created = new UserAccount();
+                    created.setId(UUID.randomUUID().toString());
+                    created.setEmail(email);
+                    created.setPasswordHash(unusablePasswordHash());
+                    return created;
+                });
+        account.setGoogleSubject(identity.sub());
+        users.save(account);
+        legacyOwnership.claim(legacyOwnerId, account.getId());
+        createSession(account.getId(), request, response);
+        return account;
+    }
+
+    public boolean googleAvailable() {
+        return !googleClientId.isBlank();
+    }
+
+    public String googleClientId() {
+        return googleAvailable() ? googleClientId : "";
+    }
+
+    public boolean emailAuthAvailable() {
+        return authMail != null && authMail.available();
+    }
+
+    @Transactional
+    public void establishSession(UserAccount account, String legacyOwnerId,
+                                 HttpServletRequest request, HttpServletResponse response) {
+        legacyOwnership.claim(legacyOwnerId, account.getId());
+        createSession(account.getId(), request, response);
+    }
+
+    private record GoogleIdentity(String aud, String email, String email_verified, String sub) { }
+
+    private String unusablePasswordHash() {
+        byte[] bytes = new byte[32];
+        random.nextBytes(bytes);
+        return passwords.encode(Base64.getUrlEncoder().withoutPadding().encodeToString(bytes));
     }
 
     @Transactional(readOnly = true)

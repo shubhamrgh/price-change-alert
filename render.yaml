@@ -34,6 +34,18 @@ services:
         value: "false"
       - key: PRICE_CHANGE_ALERT_EMAIL_FROM
         sync: false
+      - key: PRICE_CHANGE_ALERT_AUTH_EMAIL_ENABLED
+        value: "false"
+      - key: PRICE_CHANGE_ALERT_AUTH_EMAIL_FROM
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: PRICE_CHANGE_ALERT_PASSKEY_RP_ID
+        value: price-change-alert.onrender.com
+      - key: PRICE_CHANGE_ALERT_PASSKEY_RP_NAME
+        value: Price Change Alert
+      - key: PRICE_CHANGE_ALERT_PASSKEY_ORIGINS
+        value: https://price-change-alert.onrender.com
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT

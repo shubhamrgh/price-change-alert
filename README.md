@@ -3,7 +3,9 @@
 Add NSE/BSE stocks and crypto coins to a watchlist; the backend polls prices and
 delivers alerts to the authenticated subscriber's selected channels.
 
-Accounts use an opaque, hashed server-side session token in an HttpOnly cookie.
+Accounts support email/password, Google Identity, single-use email sign-in links,
+password recovery, and WebAuthn passkeys. All methods finish by issuing the same
+opaque, hashed server-side session token in an HttpOnly cookie.
 Watchlists, alerts, browser subscriptions, and notification destinations are
 owned by the account ID; caller-supplied visitor IDs are no longer trusted for
 private data. On the first login or registration after upgrading, the browser's
@@ -75,6 +77,10 @@ mvnw.cmd package
 | `PRICE_CHANGE_ALERT_VAPID_PUBLIC_KEY` / `PRICE_CHANGE_ALERT_VAPID_PRIVATE_KEY` | Web Push keys; required for notifications in production |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Production PostgreSQL connection |
 | `PRICE_CHANGE_ALERT_EMAIL_ENABLED` / `PRICE_CHANGE_ALERT_EMAIL_FROM` | Enable email delivery and choose the sender address |
+| `PRICE_CHANGE_ALERT_AUTH_EMAIL_ENABLED` / `PRICE_CHANGE_ALERT_AUTH_EMAIL_FROM` | Enable magic-link login and password-reset email; can share the notification sender |
+| `GOOGLE_CLIENT_ID` | Google Identity Services web client ID; leave empty to hide Google login |
+| `PRICE_CHANGE_ALERT_PASSKEY_RP_ID` | WebAuthn relying-party domain, without scheme or path |
+| `PRICE_CHANGE_ALERT_PASSKEY_ORIGINS` | Comma-separated exact HTTPS origins allowed for passkey ceremonies |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` | SMTP transport for email delivery |
 | `PRICE_CHANGE_ALERT_TELEGRAM_BOT_TOKEN` | Bot token used for Telegram delivery |
 | `PRICE_CHANGE_ALERT_BASE_URL` | Absolute URL inserted into email messages |
@@ -96,7 +102,65 @@ Local-only VAPID values belong in `backend/application-local.properties`, which 
 Authentication and channel-management endpoints:
 
 * `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`
+* `POST /api/auth/google`, `POST /api/auth/magic-link/request`, `POST /api/auth/magic-link/consume`
+* `POST /api/auth/password-reset/request`, `POST /api/auth/password-reset/consume`
+* `/api/auth/passkeys/**` for registration, login, listing, and removal
 * `GET /api/notification-preferences`, `PUT /api/notification-preferences/{channel}`
+
+### Authentication setup
+
+The optional providers can be configured without a paid service. Their free-tier
+limits and terms can change, so check the provider before relying on them at scale.
+
+**Google sign-in:** create a project in the
+[Google Cloud Console](https://console.cloud.google.com/), configure Google Auth
+Platform, and create an OAuth client with application type **Web application**.
+Add these Authorized JavaScript origins as applicable:
+
+```text
+https://price-change-alert.onrender.com
+http://localhost:5173
+http://localhost:8080
+```
+
+Copy the resulting `*.apps.googleusercontent.com` client ID into
+`GOOGLE_CLIENT_ID`. A client secret is not used by this Google Identity Services
+flow and must not be placed in the frontend. The backend verifies every ID token
+with Google and requires the configured audience and a Google-verified email.
+
+**Magic links and password resets:** use any SMTP provider. Brevo provides a free
+transactional-email tier suitable for testing and small deployments. Create a
+[Brevo](https://www.brevo.com/) account, verify a sender, open **SMTP & API**, and
+create an SMTP key. Configure Render with:
+
+```text
+PRICE_CHANGE_ALERT_AUTH_EMAIL_ENABLED=true
+PRICE_CHANGE_ALERT_AUTH_EMAIL_FROM=your-verified-sender@example.com
+SMTP_HOST=smtp-relay.brevo.com
+SMTP_PORT=587
+SMTP_USERNAME=your-brevo-login-email
+SMTP_PASSWORD=your-generated-brevo-smtp-key
+PRICE_CHANGE_ALERT_BASE_URL=https://price-change-alert.onrender.com
+```
+
+Use the generated SMTP key, not the Brevo account password. Gmail SMTP with a
+Google App Password is also sufficient for personal testing. Authentication
+tokens are random, stored only as SHA-256 hashes, expire after 15/30 minutes,
+and are single-use. Never commit SMTP credentials to Git.
+
+**Passkeys:** no third-party account or API key is required. Render already
+provides HTTPS, so configure the relying-party domain and exact public origin:
+
+```text
+PRICE_CHANGE_ALERT_PASSKEY_RP_ID=price-change-alert.onrender.com
+PRICE_CHANGE_ALERT_PASSKEY_ORIGINS=https://price-change-alert.onrender.com
+```
+
+The RP ID has no scheme or path; the origin includes `https://` and has no
+trailing slash. Localhost defaults are already configured for ports 8080 and
+5173. Add all production values in the Render service's **Environment** page,
+then redeploy. Leave Google and email settings empty/disabled to hide those
+methods until their providers are configured.
 
 Alert logic: PRICE alerts when the configured threshold is reached; PERCENT
 alerts compare the latest quote with the previous poll. A triggered watch item,
