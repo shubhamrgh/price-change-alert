@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: price-change-alert
+    name: trailify
     runtime: docker
     plan: free
     branch: main
@@ -22,29 +22,29 @@ services:
         sync: false
       - key: DB_PASSWORD
         sync: false
-      - key: PRICE_CHANGE_ALERT_VAPID_PUBLIC_KEY
+      - key: TRAILIFY_VAPID_PUBLIC_KEY
         sync: false
-      - key: PRICE_CHANGE_ALERT_VAPID_PRIVATE_KEY
+      - key: TRAILIFY_VAPID_PRIVATE_KEY
         sync: false
-      - key: PRICE_CHANGE_ALERT_VAPID_SUBJECT
-        value: mailto:alerts@price-change-alert.app
-      - key: PRICE_CHANGE_ALERT_BASE_URL
+      - key: TRAILIFY_VAPID_SUBJECT
+        value: mailto:alerts@trailify.app
+      - key: TRAILIFY_BASE_URL
         sync: false
-      - key: PRICE_CHANGE_ALERT_EMAIL_ENABLED
+      - key: TRAILIFY_EMAIL_ENABLED
         value: "false"
-      - key: PRICE_CHANGE_ALERT_EMAIL_FROM
+      - key: TRAILIFY_EMAIL_FROM
         sync: false
-      - key: PRICE_CHANGE_ALERT_AUTH_EMAIL_ENABLED
+      - key: TRAILIFY_AUTH_EMAIL_ENABLED
         value: "false"
-      - key: PRICE_CHANGE_ALERT_AUTH_EMAIL_FROM
+      - key: TRAILIFY_AUTH_EMAIL_FROM
         sync: false
       - key: GOOGLE_CLIENT_ID
         sync: false
-      - key: PRICE_CHANGE_ALERT_PASSKEY_RP_ID
+      - key: TRAILIFY_PASSKEY_RP_ID
         value: price-change-alert.onrender.com
-      - key: PRICE_CHANGE_ALERT_PASSKEY_RP_NAME
-        value: Tailify
-      - key: PRICE_CHANGE_ALERT_PASSKEY_ORIGINS
+      - key: TRAILIFY_PASSKEY_RP_NAME
+        value: Trailify
+      - key: TRAILIFY_PASSKEY_ORIGINS
         value: https://price-change-alert.onrender.com
       - key: SMTP_HOST
         sync: false
@@ -54,5 +54,5 @@ services:
         sync: false
       - key: SMTP_PASSWORD
         sync: false
-      - key: PRICE_CHANGE_ALERT_TELEGRAM_BOT_TOKEN
+      - key: TRAILIFY_TELEGRAM_BOT_TOKEN
         sync: false

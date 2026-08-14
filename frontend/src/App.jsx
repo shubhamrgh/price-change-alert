@@ -125,8 +125,8 @@ async function api(path, options = {}) {
   return res.status === 204 ? null : res.json()
 }
 
-const THEME_KEY = 'price-change-alert-theme'
-const LEGACY_VISITOR_KEY = 'pca-visitor-id'
+const THEME_KEY = 'trailify-theme'
+const LEGACY_VISITOR_KEY = 'trailify-visitor-id'
 function legacyOwnerId() {
   if (['localhost', '127.0.0.1'].includes(window.location.hostname)) return 'legacy'
   return localStorage.getItem(LEGACY_VISITOR_KEY)
@@ -285,7 +285,7 @@ export default function App() {
         <div className="brand">
           <span className="logo">T</span>
           <div>
-            <h1>Tailify</h1>
+            <h1>Trailify</h1>
             <p>NSE · BSE · Crypto</p>
           </div>
         </div>
@@ -466,7 +466,7 @@ function AuthScreen({ onAuthenticated, theme, setTheme }) {
         <div className="auth-brand">
           <span className="auth-logo" aria-hidden="true"><BellRing size={19} strokeWidth={2.2} /></span>
           <div>
-            <strong>Tailify</strong>
+            <strong>Trailify</strong>
             <span>NSE / BSE / Crypto</span>
           </div>
         </div>
@@ -485,7 +485,7 @@ function AuthScreen({ onAuthenticated, theme, setTheme }) {
         <section className="auth-market" aria-label="Market alert preview">
           <div className="auth-market-copy">
             <span className="market-live"><i /> Markets monitored live</span>
-            <h1>Tailify</h1>
+            <h1>Trailify</h1>
             <p>Keep every move that matters in one focused watchlist.</p>
           </div>
 

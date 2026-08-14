@@ -8,10 +8,10 @@
 		<version>4.1.0</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
-	<groupId>com.pricechangealert</groupId>
-	<artifactId>price-change-alert</artifactId>
+	<groupId>com.trailify</groupId>
+	<artifactId>trailify</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name>price-change-alert</name>
+	<name>trailify</name>
 	<description>Price change alerts for Indian stocks and crypto</description>
 	<url/>
 	<licenses>

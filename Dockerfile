@@ -18,6 +18,6 @@ RUN cd backend && mvn -q -DskipTests package
 # ---- runtime ----
 FROM eclipse-temurin:21-jre
 WORKDIR /srv
-COPY --from=api /app/backend/target/price-change-alert-0.0.1-SNAPSHOT.jar app.jar
+COPY --from=api /app/backend/target/trailify-0.0.1-SNAPSHOT.jar app.jar
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]

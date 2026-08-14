@@ -1,5 +1,5 @@
-/* Tailify service worker: network-first app shell + web push */
-const CACHE = 'pca-v3';
+/* Trailify service worker: network-first app shell + web push */
+const CACHE = 'trailify-v3';
 const PRECACHE = ['/favicon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
@@ -50,14 +50,14 @@ self.addEventListener('fetch', (event) => {
 });
 
 self.addEventListener('push', (event) => {
-  let data = { title: 'Tailify', body: '', url: '/#alerts' };
+  let data = { title: 'Trailify', body: '', url: '/#alerts' };
   try { data = Object.assign(data, event.data ? event.data.json() : {}); } catch {}
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
       icon: '/icons/icon-192.png',
       badge: '/icons/icon-192.png',
-      tag: 'pca-alert',
+      tag: 'trailify-alert',
       renotify: true,
       data: { url: data.url }
     })

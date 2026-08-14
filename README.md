@@ -1,4 +1,4 @@
-# Tailify — Indian stock & crypto price alerts (PWA)
+# Trailify — Indian stock & crypto price alerts (PWA)
 
 Add NSE/BSE stocks and crypto coins to a watchlist; the backend polls prices and
 delivers alerts to the authenticated subscriber's selected channels.
@@ -32,7 +32,7 @@ Crypto is quoted in USD (stocks in INR). NSE/BSE direct endpoints
 (nseindia.com / api.bseindia.com) were tried and removed: they are bot-blocked
 or unstable, so stocks use Yahoo Finance directly. Yahoo's unofficial chart API
 can throttle at high poll rates — keep the watchlist small or raise
-`price-change-alert.poll.interval-ms`.
+`trailify.poll.interval-ms`.
 
 ## Run it
 
@@ -41,7 +41,7 @@ Backend (serves the built PWA too):
 ```
 cd backend
 mvnw package -DskipTests            (first run downloads Maven)
-java -jar target\price-change-alert-0.0.1-SNAPSHOT.jar
+java -jar target\trailify-0.0.1-SNAPSHOT.jar
 ```
 
 App: http://localhost:8080  (API on the same server)
@@ -68,22 +68,22 @@ mvnw.cmd package
 
 | Key | Meaning |
 |-----|---------|
-| `price-change-alert.poll.interval-ms` | alert engine poll cadence (default 30000) |
-| `price-change-alert.poll.max-quote-age` | oldest quote allowed to trigger an alert (default 2 minutes) |
-| `price-change-alert.cache.quote-ttl` | quote cache freshness window (default 20 seconds) |
-| `price-change-alert.cache.search-ttl` | successful search cache window (default 10 minutes) |
-| `price-change-alert.cache.chart-ttl` | chart cache window (default 5 minutes) |
-| `price-change-alert.cache.logo-ttl` | resolved stock-logo cache window (default 24 hours) |
-| `PRICE_CHANGE_ALERT_VAPID_PUBLIC_KEY` / `PRICE_CHANGE_ALERT_VAPID_PRIVATE_KEY` | Web Push keys; required for notifications in production |
+| `trailify.poll.interval-ms` | alert engine poll cadence (default 30000) |
+| `trailify.poll.max-quote-age` | oldest quote allowed to trigger an alert (default 2 minutes) |
+| `trailify.cache.quote-ttl` | quote cache freshness window (default 20 seconds) |
+| `trailify.cache.search-ttl` | successful search cache window (default 10 minutes) |
+| `trailify.cache.chart-ttl` | chart cache window (default 5 minutes) |
+| `trailify.cache.logo-ttl` | resolved stock-logo cache window (default 24 hours) |
+| `TRAILIFY_VAPID_PUBLIC_KEY` / `TRAILIFY_VAPID_PRIVATE_KEY` | Web Push keys; required for notifications in production |
 | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` | Production PostgreSQL connection |
-| `PRICE_CHANGE_ALERT_EMAIL_ENABLED` / `PRICE_CHANGE_ALERT_EMAIL_FROM` | Enable email delivery and choose the sender address |
-| `PRICE_CHANGE_ALERT_AUTH_EMAIL_ENABLED` / `PRICE_CHANGE_ALERT_AUTH_EMAIL_FROM` | Enable magic-link login and password-reset email; can share the notification sender |
+| `TRAILIFY_EMAIL_ENABLED` / `TRAILIFY_EMAIL_FROM` | Enable email delivery and choose the sender address |
+| `TRAILIFY_AUTH_EMAIL_ENABLED` / `TRAILIFY_AUTH_EMAIL_FROM` | Enable magic-link login and password-reset email; can share the notification sender |
 | `GOOGLE_CLIENT_ID` | Google Identity Services web client ID; leave empty to hide Google login |
-| `PRICE_CHANGE_ALERT_PASSKEY_RP_ID` | WebAuthn relying-party domain, without scheme or path |
-| `PRICE_CHANGE_ALERT_PASSKEY_ORIGINS` | Comma-separated exact HTTPS origins allowed for passkey ceremonies |
+| `TRAILIFY_PASSKEY_RP_ID` | WebAuthn relying-party domain, without scheme or path |
+| `TRAILIFY_PASSKEY_ORIGINS` | Comma-separated exact HTTPS origins allowed for passkey ceremonies |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD` | SMTP transport for email delivery |
-| `PRICE_CHANGE_ALERT_TELEGRAM_BOT_TOKEN` | Bot token used for Telegram delivery |
-| `PRICE_CHANGE_ALERT_BASE_URL` | Absolute URL inserted into email messages |
+| `TRAILIFY_TELEGRAM_BOT_TOKEN` | Bot token used for Telegram delivery |
+| `TRAILIFY_BASE_URL` | Absolute URL inserted into email messages |
 
 Local-only VAPID values belong in `backend/application-local.properties`, which is excluded from Git and Docker builds.
 
@@ -134,13 +134,13 @@ transactional-email tier suitable for testing and small deployments. Create a
 create an SMTP key. Configure Render with:
 
 ```text
-PRICE_CHANGE_ALERT_AUTH_EMAIL_ENABLED=true
-PRICE_CHANGE_ALERT_AUTH_EMAIL_FROM=your-verified-sender@example.com
+TRAILIFY_AUTH_EMAIL_ENABLED=true
+TRAILIFY_AUTH_EMAIL_FROM=your-verified-sender@example.com
 SMTP_HOST=smtp-relay.brevo.com
 SMTP_PORT=587
 SMTP_USERNAME=your-brevo-login-email
 SMTP_PASSWORD=your-generated-brevo-smtp-key
-PRICE_CHANGE_ALERT_BASE_URL=https://price-change-alert.onrender.com
+TRAILIFY_BASE_URL=https://price-change-alert.onrender.com
 ```
 
 Use the generated SMTP key, not the Brevo account password. Gmail SMTP with a
@@ -152,8 +152,8 @@ and are single-use. Never commit SMTP credentials to Git.
 provides HTTPS, so configure the relying-party domain and exact public origin:
 
 ```text
-PRICE_CHANGE_ALERT_PASSKEY_RP_ID=price-change-alert.onrender.com
-PRICE_CHANGE_ALERT_PASSKEY_ORIGINS=https://price-change-alert.onrender.com
+TRAILIFY_PASSKEY_RP_ID=price-change-alert.onrender.com
+TRAILIFY_PASSKEY_ORIGINS=https://price-change-alert.onrender.com
 ```
 
 The RP ID has no scheme or path; the origin includes `https://` and has no
@@ -173,8 +173,8 @@ exponential backoff. This provides at-least-once delivery.
 
 * Mobile/browser: configure VAPID keys, open the app over HTTPS, log in, and
   enable Mobile / browser in the Notify tab.
-* Email: configure SMTP plus `PRICE_CHANGE_ALERT_EMAIL_ENABLED=true` and a
-  verified `PRICE_CHANGE_ALERT_EMAIL_FROM` address.
+* Email: configure SMTP plus `TRAILIFY_EMAIL_ENABLED=true` and a
+  verified `TRAILIFY_EMAIL_FROM` address.
 * Telegram: create a bot, set its token, send `/start` to the bot, and enter the
   resulting chat ID (or an `@channel` username) in Notify.
 * Discord: create an Incoming Webhook in a channel and paste its HTTPS URL in
@@ -248,7 +248,7 @@ Steps (Render, ~10 min):
    instance or another always-on host.
 5. Open it on your phone, Add to Home screen, allow notifications -> done.
 
-Local Docker build check: `docker build -t price-change-alert .` (`render.yaml` + `Dockerfile` included).
+Local Docker build check: `docker build -t trailify .` (`render.yaml` + `Dockerfile` included).
 
 ## Phase 2 ideas
 

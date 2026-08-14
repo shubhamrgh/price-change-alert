@@ -1,6 +1,6 @@
 {
-  "name": "Tailify",
-  "short_name": "Tailify",
+  "name": "Trailify",
+  "short_name": "Trailify",
   "description": "Price change alerts for Indian stocks (NSE/BSE) and crypto.",
   "start_url": "/",
   "display": "standalone",
