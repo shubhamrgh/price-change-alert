@@ -29,7 +29,7 @@ services:
       - key: TRAILIFY_VAPID_SUBJECT
         value: mailto:alerts@trailify.app
       - key: TRAILIFY_BASE_URL
-        sync: false
+        value: https://trailify.onrender.com
       - key: TRAILIFY_EMAIL_ENABLED
         value: "false"
       - key: TRAILIFY_EMAIL_FROM
@@ -41,11 +41,11 @@ services:
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: TRAILIFY_PASSKEY_RP_ID
-        value: price-change-alert.onrender.com
+        value: trailify.onrender.com
       - key: TRAILIFY_PASSKEY_RP_NAME
         value: Trailify
       - key: TRAILIFY_PASSKEY_ORIGINS
-        value: https://price-change-alert.onrender.com
+        value: https://trailify.onrender.com
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
