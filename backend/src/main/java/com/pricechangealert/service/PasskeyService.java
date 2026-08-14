@@ -69,7 +69,7 @@ public class PasskeyService {
                           UserAccountRepository users,
                           @Value("${price-change-alert.auth.passkeys.challenge-ttl:5m}") Duration challengeTtl,
                           @Value("${price-change-alert.auth.passkeys.rp-id:localhost}") String rpId,
-                          @Value("${price-change-alert.auth.passkeys.rp-name:Price Change Alert}") String rpName,
+                          @Value("${price-change-alert.auth.passkeys.rp-name:Tailify}") String rpName,
                           @Value("${price-change-alert.auth.passkeys.origins:http://localhost:8080,http://localhost:5173}")
                           String origins) {
         this.credentials = credentials;

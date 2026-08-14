@@ -85,7 +85,7 @@ public class PushService {
         String payload;
         try {
             payload = mapper.writeValueAsString(java.util.Map.of(
-                    "title", "Price Change Alert: " + symbol.toUpperCase(Locale.ROOT),
+                    "title", "Tailify: " + symbol.toUpperCase(Locale.ROOT),
                     "body", message,
                     "market", market.name(),
                     "url", "/#alerts"));

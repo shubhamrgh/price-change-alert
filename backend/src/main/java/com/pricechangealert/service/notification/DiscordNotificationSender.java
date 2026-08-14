@@ -39,7 +39,7 @@ public class DiscordNotificationSender implements NotificationSender {
             webClient.post()
                     .uri(delivery.getDestination())
                     .bodyValue(Map.of(
-                            "username", "Price Change Alert",
+                            "username", "Tailify",
                             "content", "**" + delivery.getSymbol() + "** · " + delivery.getMessage()))
                     .retrieve()
                     .toBodilessEntity()

@@ -1,4 +1,4 @@
-# Price Change Alert — Indian stock & crypto price-change alerts (PWA)
+# Tailify — Indian stock & crypto price alerts (PWA)
 
 Add NSE/BSE stocks and crypto coins to a watchlist; the backend polls prices and
 delivers alerts to the authenticated subscriber's selected channels.

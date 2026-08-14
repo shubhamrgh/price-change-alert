@@ -43,7 +43,7 @@ services:
       - key: PRICE_CHANGE_ALERT_PASSKEY_RP_ID
         value: price-change-alert.onrender.com
       - key: PRICE_CHANGE_ALERT_PASSKEY_RP_NAME
-        value: Price Change Alert
+        value: Tailify
       - key: PRICE_CHANGE_ALERT_PASSKEY_ORIGINS
         value: https://price-change-alert.onrender.com
       - key: SMTP_HOST

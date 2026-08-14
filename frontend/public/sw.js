@@ -1,4 +1,4 @@
-/* Price Change Alert service worker: network-first app shell + web push */
+/* Tailify service worker: network-first app shell + web push */
 const CACHE = 'pca-v3';
 const PRECACHE = ['/favicon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/manifest.webmanifest'];
 
@@ -50,7 +50,7 @@ self.addEventListener('fetch', (event) => {
 });
 
 self.addEventListener('push', (event) => {
-  let data = { title: 'Price Change Alert', body: '', url: '/#alerts' };
+  let data = { title: 'Tailify', body: '', url: '/#alerts' };
   try { data = Object.assign(data, event.data ? event.data.json() : {}); } catch {}
   event.waitUntil(
     self.registration.showNotification(data.title, {

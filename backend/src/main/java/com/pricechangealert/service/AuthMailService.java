@@ -30,14 +30,14 @@ public class AuthMailService {
     }
 
     public void sendMagicLink(String email, String link) {
-        send(email, "Your Price Change Alert sign-in link",
+        send(email, "Your Tailify sign-in link",
                 "Use this secure link to sign in:\n\n" + link
                         + "\n\nThis link expires in 15 minutes and can be used once."
                         + " If you did not request it, ignore this email.");
     }
 
     public void sendPasswordReset(String email, String link) {
-        send(email, "Reset your Price Change Alert password",
+        send(email, "Reset your Tailify password",
                 "Use this secure link to choose a new password:\n\n" + link
                         + "\n\nThis link expires in 30 minutes and can be used once."
                         + " If you did not request it, ignore this email.");

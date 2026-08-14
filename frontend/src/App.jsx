@@ -272,7 +272,7 @@ export default function App() {
   }
 
   if (authLoading) {
-    return <div className="app auth-loading"><div className="logo">PC</div><p>Loading your alerts...</p></div>
+    return <div className="app auth-loading"><div className="logo">T</div><p>Loading your alerts...</p></div>
   }
   if (!authUser) {
     return <AuthScreen onAuthenticated={setAuthUser} theme={theme} setTheme={setTheme} />
@@ -283,9 +283,9 @@ export default function App() {
       <ErrorBoundary>
         <header className="header">
         <div className="brand">
-          <span className="logo">PC</span>
+          <span className="logo">T</span>
           <div>
-            <h1>Price Change Alert</h1>
+            <h1>Tailify</h1>
             <p>NSE · BSE · Crypto</p>
           </div>
         </div>
@@ -466,7 +466,7 @@ function AuthScreen({ onAuthenticated, theme, setTheme }) {
         <div className="auth-brand">
           <span className="auth-logo" aria-hidden="true"><BellRing size={19} strokeWidth={2.2} /></span>
           <div>
-            <strong>Price Change Alert</strong>
+            <strong>Tailify</strong>
             <span>NSE / BSE / Crypto</span>
           </div>
         </div>
@@ -485,7 +485,7 @@ function AuthScreen({ onAuthenticated, theme, setTheme }) {
         <section className="auth-market" aria-label="Market alert preview">
           <div className="auth-market-copy">
             <span className="market-live"><i /> Markets monitored live</span>
-            <h1>Price Change Alert</h1>
+            <h1>Tailify</h1>
             <p>Keep every move that matters in one focused watchlist.</p>
           </div>
 
