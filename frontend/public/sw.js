@@ -1,6 +1,6 @@
 /* Trailify service worker: network-first app shell + web push */
-const CACHE = 'trailify-v3';
-const PRECACHE = ['/favicon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/manifest.webmanifest'];
+const CACHE = 'trailify-v4';
+const PRECACHE = ['/logo.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/manifest.webmanifest'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

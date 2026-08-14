@@ -60,6 +60,10 @@ const timeAgo = (iso) => {
   return fmtTime(iso)
 }
 
+function BrandLogo({ className = '' }) {
+  return <img className={`brand-logo ${className}`} src="/logo.svg" alt="" aria-hidden="true" />
+}
+
 function MarketIcon({ market, className = '' }) {
   const isCrypto = market === 'CRYPTO'
   return (
@@ -272,7 +276,7 @@ export default function App() {
   }
 
   if (authLoading) {
-    return <div className="app auth-loading"><div className="logo">T</div><p>Loading your alerts...</p></div>
+    return <div className="app auth-loading"><BrandLogo className="logo" /><p>Loading your alerts...</p></div>
   }
   if (!authUser) {
     return <AuthScreen onAuthenticated={setAuthUser} theme={theme} setTheme={setTheme} />
@@ -283,7 +287,7 @@ export default function App() {
       <ErrorBoundary>
         <header className="header">
         <div className="brand">
-          <span className="logo">T</span>
+          <BrandLogo className="logo" />
           <div>
             <h1>Trailify</h1>
             <p>NSE · BSE · Crypto</p>
@@ -464,7 +468,7 @@ function AuthScreen({ onAuthenticated, theme, setTheme }) {
     <main className="auth-shell">
       <header className="auth-topbar">
         <div className="auth-brand">
-          <span className="auth-logo" aria-hidden="true"><BellRing size={19} strokeWidth={2.2} /></span>
+          <BrandLogo className="auth-logo" />
           <div>
             <strong>Trailify</strong>
             <span>NSE / BSE / Crypto</span>

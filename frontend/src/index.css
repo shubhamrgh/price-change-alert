@@ -73,12 +73,10 @@ body {
 /* ---------- header ---------- */
 .header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .brand { display: flex; align-items: center; gap: 11px; }
+.brand-logo { display: block; flex: 0 0 auto; object-fit: contain; }
 .logo {
-  width: 40px; height: 40px; border-radius: 12px;
-  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-  box-shadow: 0 6px 18px var(--accent-soft);
-  display: grid; place-items: center;
-  font-weight: 800; font-size: 1rem; color: var(--on-accent);
+  width: 40px; height: 40px;
+  filter: drop-shadow(0 6px 9px var(--accent-soft));
 }
 .brand h1 { margin: 0; font-size: 1.2rem; letter-spacing: 0.2px; }
 .brand p { margin: 0; font-size: 0.72rem; color: var(--muted); }
@@ -124,10 +122,8 @@ body {
 .auth-topbar { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .auth-brand { display: flex; align-items: center; gap: 12px; }
 .auth-logo {
-  width: 38px; height: 38px; border-radius: 11px;
-  display: grid; place-items: center; color: var(--on-accent);
-  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-  box-shadow: 0 8px 24px var(--accent-soft);
+  width: 38px; height: 38px;
+  filter: drop-shadow(0 8px 12px var(--accent-soft));
 }
 .auth-brand div { display: flex; flex-direction: column; gap: 2px; }
 .auth-brand strong { font-size: 0.94rem; letter-spacing: 0.01em; }
