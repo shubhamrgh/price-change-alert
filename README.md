@@ -118,7 +118,7 @@ Platform, and create an OAuth client with application type **Web application**.
 Add these Authorized JavaScript origins as applicable:
 
 ```text
-https://trailify.onrender.com
+https://mytrailify.onrender.com
 http://localhost:5173
 http://localhost:8080
 ```
@@ -140,7 +140,7 @@ SMTP_HOST=smtp-relay.brevo.com
 SMTP_PORT=587
 SMTP_USERNAME=your-brevo-login-email
 SMTP_PASSWORD=your-generated-brevo-smtp-key
-TRAILIFY_BASE_URL=https://trailify.onrender.com
+TRAILIFY_BASE_URL=https://mytrailify.onrender.com
 ```
 
 Use the generated SMTP key, not the Brevo account password. Gmail SMTP with a
@@ -152,8 +152,8 @@ and are single-use. Never commit SMTP credentials to Git.
 provides HTTPS, so configure the relying-party domain and exact public origin:
 
 ```text
-TRAILIFY_PASSKEY_RP_ID=trailify.onrender.com
-TRAILIFY_PASSKEY_ORIGINS=https://trailify.onrender.com
+TRAILIFY_PASSKEY_RP_ID=mytrailify.onrender.com
+TRAILIFY_PASSKEY_ORIGINS=https://mytrailify.onrender.com
 ```
 
 The RP ID has no scheme or path; the origin includes `https://` and has no
@@ -241,7 +241,7 @@ Steps (Render, ~10 min):
 
 1. Push this repo to GitHub (git init, add, commit, push).
 2. On Render: New -> Web Service -> connect the repo -> pick the `Dockerfile`/render.yaml.
-3. Deploy. Your URL `https://trailify.onrender.com` gets HTTPS automatically.
+3. Deploy. Your URL `https://mytrailify.onrender.com` gets HTTPS automatically.
 4. Keep GitHub Actions enabled. `.github/workflows/keep-render-awake.yml` checks the
    liveness endpoint every 5 minutes as an external wake-up request. Render can still
    delay scheduled GitHub jobs; guaranteed 24/7 alert polling requires a paid Render

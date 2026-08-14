@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: trailify
+    name: mytrailify
     runtime: docker
     plan: free
     branch: main
@@ -29,7 +29,7 @@ services:
       - key: TRAILIFY_VAPID_SUBJECT
         value: mailto:alerts@trailify.app
       - key: TRAILIFY_BASE_URL
-        value: https://trailify.onrender.com
+        value: https://mytrailify.onrender.com
       - key: TRAILIFY_EMAIL_ENABLED
         value: "false"
       - key: TRAILIFY_EMAIL_FROM
@@ -41,11 +41,11 @@ services:
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: TRAILIFY_PASSKEY_RP_ID
-        value: trailify.onrender.com
+        value: mytrailify.onrender.com
       - key: TRAILIFY_PASSKEY_RP_NAME
         value: Trailify
       - key: TRAILIFY_PASSKEY_ORIGINS
-        value: https://trailify.onrender.com
+        value: https://mytrailify.onrender.com
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
