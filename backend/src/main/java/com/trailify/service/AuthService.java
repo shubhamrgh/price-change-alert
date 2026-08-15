@@ -95,8 +95,50 @@ public class AuthService {
         account.setId(UUID.randomUUID().toString());
         account.setEmail(normalizedEmail);
         account.setPasswordHash(passwords.encode(password));
+        account.setGuest(false);
         users.save(account);
         legacyOwnership.claim(legacyOwnerId, account.getId());
+        createSession(account.getId(), request, response);
+        return account;
+    }
+
+    @Transactional
+    public UserAccount continueAsGuest(HttpServletRequest request, HttpServletResponse response) {
+        Optional<UserAccount> current = currentUser(request);
+        if (current.isPresent()) return current.get();
+
+        String id = UUID.randomUUID().toString();
+        UserAccount account = new UserAccount();
+        account.setId(id);
+        account.setEmail("guest-" + id + "@guest.trailify.local");
+        account.setPasswordHash(unusablePasswordHash());
+        account.setGuest(true);
+        users.save(account);
+        createSession(account.getId(), request, response);
+        return account;
+    }
+
+    @Transactional
+    public UserAccount claimGuest(String email, String password,
+                                  HttpServletRequest request, HttpServletResponse response) {
+        UserAccount account = requireUser(request);
+        if (!account.isGuest()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "This account has already been claimed");
+        }
+
+        String normalizedEmail = validateEmail(email);
+        validatePassword(password);
+        if (users.existsByEmailIgnoreCase(normalizedEmail)) {
+            throw new IllegalArgumentException(
+                    "An account with that email already exists. Sign in to that account instead.");
+        }
+
+        account.setEmail(normalizedEmail);
+        account.setPasswordHash(passwords.encode(password));
+        account.setGuest(false);
+        users.save(account);
+
+        sessions.deleteByUserId(account.getId());
         createSession(account.getId(), request, response);
         return account;
     }

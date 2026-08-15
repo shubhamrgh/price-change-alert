@@ -29,6 +29,9 @@ public class UserAccount {
     @Column(name = "google_subject", unique = true, length = 255)
     private String googleSubject;
 
+    @Column(name = "is_guest")
+    private Boolean guest = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -40,6 +43,8 @@ public class UserAccount {
     public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
     public String getGoogleSubject() { return googleSubject; }
     public void setGoogleSubject(String googleSubject) { this.googleSubject = googleSubject; }
+    public boolean isGuest() { return Boolean.TRUE.equals(guest); }
+    public void setGuest(boolean guest) { this.guest = guest; }
     public Instant getCreatedAt() { return createdAt; }
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
 }

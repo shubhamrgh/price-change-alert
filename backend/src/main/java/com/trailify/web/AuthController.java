@@ -31,6 +31,9 @@ public class AuthController {
             @NotBlank @Email @Size(max = 320) String email,
             @NotBlank @Size(min = 8, max = 128) String password,
             @Size(max = 64) String legacyOwnerId) { }
+    public record ClaimRequest(
+            @NotBlank @Email @Size(max = 320) String email,
+            @NotBlank @Size(min = 8, max = 128) String password) { }
     public record EmailRequest(@NotBlank @Email @Size(max = 320) String email) { }
     public record TokenRequest(@NotBlank @Size(max = 512) String token,
                                @Size(max = 64) String legacyOwnerId) { }
@@ -41,9 +44,10 @@ public class AuthController {
     public record AuthConfig(boolean google, String googleClientId,
                              boolean emailLinks, boolean passkeys) { }
 
-    public record AccountResponse(String id, String email, Instant createdAt) {
+    public record AccountResponse(String id, String email, boolean guest, Instant createdAt) {
         static AccountResponse from(UserAccount account) {
-            return new AccountResponse(account.getId(), account.getEmail(), account.getCreatedAt());
+            return new AccountResponse(account.getId(), account.isGuest() ? null : account.getEmail(),
+                    account.isGuest(), account.getCreatedAt());
         }
     }
 
@@ -61,6 +65,18 @@ public class AuthController {
                                     HttpServletRequest request, HttpServletResponse response) {
         return AccountResponse.from(authService.register(
                 credentials.email(), credentials.password(), credentials.legacyOwnerId(), request, response));
+    }
+
+    @PostMapping("/guest")
+    @ResponseStatus(HttpStatus.CREATED)
+    public AccountResponse guest(HttpServletRequest request, HttpServletResponse response) {
+        return AccountResponse.from(authService.continueAsGuest(request, response));
+    }
+
+    @PostMapping("/claim")
+    public AccountResponse claim(@Valid @RequestBody ClaimRequest body,
+                                 HttpServletRequest request, HttpServletResponse response) {
+        return AccountResponse.from(authService.claimGuest(body.email(), body.password(), request, response));
     }
 
     @PostMapping("/login")

@@ -1,12 +1,16 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Component } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import {
   ArrowRight,
   BellRing,
   Check,
+  ChevronDown,
+  CircleHelp,
   Eye,
   EyeOff,
   KeyRound,
+  LogOut,
   LockKeyhole,
   Mail,
   Moon,
@@ -15,6 +19,8 @@ import {
   Sun,
   TrendingDown,
   TrendingUp,
+  UserRound,
+  X,
 } from 'lucide-react'
 import { enablePushNotifications, disablePushNotifications, pushReady } from './main.jsx'
 
@@ -130,6 +136,7 @@ async function api(path, options = {}) {
 }
 
 const THEME_KEY = 'trailify-theme'
+const TOUR_KEY = 'trailify-tour-v1'
 const LEGACY_VISITOR_KEY = 'trailify-visitor-id'
 function legacyOwnerId() {
   if (['localhost', '127.0.0.1'].includes(window.location.hostname)) return 'legacy'
@@ -168,6 +175,9 @@ export default function App() {
   const [tab, setTab] = useState('watch')
   const [notificationOn, setNotificationOn] = useState(false)
   const [error, setError] = useState('')
+  const [claimOpen, setClaimOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [tourOpen, setTourOpen] = useState(false)
   const refreshEnabled = useRef(false)
   const refreshRunning = useRef(false)
   const refreshQueued = useRef(false)
@@ -183,6 +193,30 @@ export default function App() {
     document.documentElement.dataset.theme = theme
     localStorage.setItem(THEME_KEY, theme)
   }, [theme])
+
+  useEffect(() => {
+    if (!authUser) return
+    const key = `${TOUR_KEY}:${authUser.id}`
+    if (!localStorage.getItem(key)) {
+      setTab('watch')
+      setTourOpen(true)
+    }
+  }, [authUser])
+
+  useEffect(() => {
+    if (!profileOpen) return undefined
+    const closeProfile = (event) => {
+      if (event.type === 'keydown' && event.key !== 'Escape') return
+      if (event.type === 'pointerdown' && event.target.closest('.profile-menu')) return
+      setProfileOpen(false)
+    }
+    document.addEventListener('pointerdown', closeProfile)
+    document.addEventListener('keydown', closeProfile)
+    return () => {
+      document.removeEventListener('pointerdown', closeProfile)
+      document.removeEventListener('keydown', closeProfile)
+    }
+  }, [profileOpen])
 
   useEffect(() => {
     const onPush = () => setNotificationOn(pushReady())
@@ -265,14 +299,27 @@ export default function App() {
   }
 
   const logout = async () => {
+    if (authUser?.guest && !window.confirm('Leave guest mode? Claim your account first if you want to keep access to this watchlist.')) return
+    setError('')
     try {
       await disablePushNotifications().catch(() => {})
-      await api('/api/auth/logout')
-    } finally {
+      await api('/api/auth/logout', { method: 'POST' })
       window.__pushEnabled = false
       window.dispatchEvent(new Event('pushstate'))
+      setProfileOpen(false)
       setAuthUser(null)
-    }
+    } catch (e) { setError(e.message) }
+  }
+
+  const closeTour = () => {
+    if (authUser) localStorage.setItem(`${TOUR_KEY}:${authUser.id}`, 'done')
+    setTourOpen(false)
+  }
+
+  const startTour = () => {
+    setProfileOpen(false)
+    setTab('watch')
+    setTourOpen(true)
   }
 
   if (authLoading) {
@@ -286,7 +333,7 @@ export default function App() {
     <div className="app">
       <ErrorBoundary>
         <header className="header">
-        <div className="brand">
+        <div className="brand" data-tour="brand">
           <BrandLogo className="logo" />
           <div>
             <h1>Trailify</h1>
@@ -302,28 +349,59 @@ export default function App() {
            <button className={`bell ${notificationOn ? 'on' : ''}`} onClick={togglePush} aria-label="Mobile notifications">
              {notificationOn ? 'ON' : 'OFF'}
            </button>
-           <button className="icon-btn" onClick={logout} title={`Log out ${authUser.email}`}>Log out</button>
+          <div className="profile-menu">
+            <button className={`profile-trigger ${profileOpen ? 'open' : ''}`} type="button" onClick={() => setProfileOpen((current) => !current)} aria-expanded={profileOpen} aria-haspopup="menu" aria-label="Open profile menu" data-tour="profile">
+              <UserRound size={17} /><span>{authUser.guest ? 'Guest' : 'Profile'}</span><ChevronDown size={14} />
+            </button>
+            <AnimatePresence>
+            {profileOpen && (
+              <motion.div className="profile-popover" role="menu" data-lenis-prevent initial={{ opacity: 0, y: -8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.98 }} transition={{ duration: 0.18, ease: 'easeOut' }}>
+                <div className="profile-summary">
+                  <span className="profile-avatar"><UserRound size={19} /></span>
+                  <div><strong>{authUser.guest ? 'Guest profile' : 'Your profile'}</strong><span>{authUser.guest ? 'Temporary account' : authUser.email}</span></div>
+                </div>
+                {authUser.guest && <button className="profile-primary" type="button" role="menuitem" onClick={() => { setProfileOpen(false); setClaimOpen(true) }}><ShieldCheck size={17} /><span><strong>Claim account</strong><small>Keep access on every device</small></span></button>}
+                <button className="profile-action" type="button" role="menuitem" onClick={() => { setProfileOpen(false); setTab('notifications') }}><BellRing size={17} /><span>Notification settings</span></button>
+                <button className="profile-action" type="button" role="menuitem" onClick={startTour}><CircleHelp size={17} /><span>Show product tour</span></button>
+                <button className="profile-action danger" type="button" role="menuitem" onClick={logout}><LogOut size={17} /><span>{authUser.guest ? 'Leave guest mode' : 'Log out'}</span></button>
+              </motion.div>
+            )}
+            </AnimatePresence>
+          </div>
         </div>
       </header>
 
+      <AnimatePresence initial={false}>
+      {authUser.guest && (
+        <motion.section className="guest-banner" data-tour="account" aria-label="Guest account status" initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0, margin: 0, paddingTop: 0, paddingBottom: 0 }} transition={{ duration: 0.24, ease: 'easeOut' }}>
+          <span className="guest-banner-icon"><UserRound size={18} /></span>
+          <div><strong>Browsing as a guest</strong><span>Claim this account to keep access on other devices.</span></div>
+          <button type="button" onClick={() => setClaimOpen(true)}>Claim account</button>
+        </motion.section>
+      )}
+      </AnimatePresence>
+
       {error && <div className="banner error" onClick={() => setError('')}>{error}</div>}
 
-      <nav className="tabs">
+      <nav className="tabs" data-tour="tabs">
         <button className={tab === 'watch' ? 'active' : ''} onClick={() => setTab('watch')}>Watchlist</button>
         <button className={tab === 'alerts' ? 'active' : ''} onClick={() => setTab('alerts')}>Alerts {alerts.length > 0 && <span className="count">{alerts.length}</span>}</button>
-        <button className={tab === 'notifications' ? 'active' : ''} onClick={() => setTab('notifications')}>Notify</button>
       </nav>
 
+      <AnimatePresence mode="wait" initial={false}>
       {tab === 'watch' ? (
-        <>
+        <motion.div key="watch" className="tab-panel" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
           <AddForm onAdded={refresh} />
           <WatchList items={items} onDelete={removeItem} onToggle={setItemActive} />
-        </>
+        </motion.div>
       ) : tab === 'alerts' ? (
-        <AlertList alerts={alerts} onDelete={deleteAlert} onClearAll={clearAlerts} />
+        <motion.div key="alerts" className="tab-panel" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.22, ease: 'easeOut' }}><AlertList alerts={alerts} onDelete={deleteAlert} onClearAll={clearAlerts} /></motion.div>
         ) : (
-          <NotificationSettings user={authUser} notificationOn={notificationOn} onTogglePush={togglePush} />
+          <motion.div key="notifications" className="tab-panel" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.22, ease: 'easeOut' }}><NotificationSettings user={authUser} notificationOn={notificationOn} onTogglePush={togglePush} /></motion.div>
         )}
+      </AnimatePresence>
+      <AnimatePresence>{claimOpen && <ClaimAccountDialog onClose={() => setClaimOpen(false)} onClaimed={setAuthUser} />}</AnimatePresence>
+      <AnimatePresence>{tourOpen && <ProductTour user={authUser} onClose={closeTour} />}</AnimatePresence>
       </ErrorBoundary>
     </div>
   )
@@ -459,6 +537,14 @@ function AuthScreen({ onAuthenticated, theme, setTheme }) {
     } catch (e) {
       setError(e.name === 'NotAllowedError' ? 'Passkey sign-in was cancelled' : e.message)
     } finally { setBusy(false) }
+  }
+
+  const continueAsGuest = async () => {
+    setError(''); setMessage(''); setBusy(true)
+    try {
+      const user = await api('/api/auth/guest', { method: 'POST' })
+      onAuthenticated(user)
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
 
   const emailOnly = mode === 'magic' || mode === 'forgot'
@@ -629,6 +715,9 @@ function AuthScreen({ onAuthenticated, theme, setTheme }) {
             </button>
 
             {mode === 'login' && config.passkeys && <button className="auth-secondary" type="button" onClick={loginWithPasskey} disabled={busy}><KeyRound size={17} /> Sign in with a passkey</button>}
+            {mode === 'login' && <div className="auth-divider"><span>or explore first</span></div>}
+            {mode === 'login' && <button className="auth-guest" type="button" onClick={continueAsGuest} disabled={busy}><UserRound size={17} /> Continue as guest</button>}
+            {mode === 'login' && <p className="auth-guest-note">No account needed. Claim your watchlist later to use it on other devices.</p>}
             {mode === 'login' && <div className="auth-links">
               {config.emailLinks && <button type="button" onClick={() => changeMode('magic')}>Email me a sign-in link</button>}
               {config.emailLinks && <button type="button" onClick={() => changeMode('forgot')}>Forgot password?</button>}
@@ -643,6 +732,165 @@ function AuthScreen({ onAuthenticated, theme, setTheme }) {
         </section>
       </div>
     </main>
+  )
+}
+
+function ClaimAccountDialog({ onClose, onClaimed }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const onKeyDown = (event) => { if (event.key === 'Escape' && !busy) onClose() }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [busy, onClose])
+
+  const submit = async (event) => {
+    event.preventDefault()
+    setError('')
+    if (password !== confirmPassword) {
+      setError('Passwords do not match')
+      return
+    }
+    setBusy(true)
+    try {
+      const user = await api('/api/auth/claim', {
+        method: 'POST', body: JSON.stringify({ email, password }),
+      })
+      onClaimed(user)
+      onClose()
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+
+  return (
+    <motion.div className="modal-layer" role="presentation" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
+      <button className="modal-backdrop" type="button" onClick={onClose} disabled={busy} aria-label="Close claim account dialog" />
+      <motion.section className="claim-dialog" role="dialog" aria-modal="true" aria-labelledby="claim-title" data-lenis-prevent initial={{ opacity: 0, y: 18, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.98 }} transition={{ type: 'spring', stiffness: 360, damping: 28 }}>
+        <div className="modal-heading">
+          <div><span className="auth-eyebrow">Save your progress</span><h2 id="claim-title">Claim your account</h2></div>
+          <button className="modal-close" type="button" onClick={onClose} disabled={busy} aria-label="Close"><X size={19} /></button>
+        </div>
+        <p className="claim-intro">Your watchlist and alert history stay exactly as they are. You will also be able to sign in on another device.</p>
+        <form className="claim-form" onSubmit={submit}>
+          <label className="auth-field"><span>Email address</span><div className="auth-input-wrap"><Mail size={18} /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" placeholder="you@example.com" autoFocus required disabled={busy} /></div></label>
+          <label className="auth-field"><span>Create a password</span><div className="auth-input-wrap"><LockKeyhole size={18} /><input type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} maxLength={128} autoComplete="new-password" placeholder="At least 8 characters" required disabled={busy} /><button className="password-toggle" type="button" onClick={() => setShowPassword((current) => !current)} aria-label={showPassword ? 'Hide password' : 'Show password'}><span>{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</span></button></div></label>
+          <label className="auth-field"><span>Confirm password</span><div className="auth-input-wrap"><ShieldCheck size={18} /><input type={showPassword ? 'text' : 'password'} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={8} maxLength={128} autoComplete="new-password" placeholder="Enter it again" required disabled={busy} /></div></label>
+          {error && <div className="auth-error" role="alert">{error}</div>}
+          <button className="auth-submit" disabled={busy || password.length < 8}><span>{busy ? 'Saving your account' : 'Claim account'}</span>{busy ? <i className="auth-spinner" /> : <ArrowRight size={18} />}</button>
+        </form>
+      </motion.section>
+    </motion.div>
+  )
+}
+
+function ProductTour({ user, onClose }) {
+  const steps = useMemo(() => [
+    { target: '[data-tour="brand"]', label: 'Welcome to Trailify', title: 'Your market alerts, in one place', copy: 'Track Indian stocks and crypto without switching between apps.' },
+    { target: '[data-tour="add"]', label: 'Build your watchlist', title: 'Search, choose a trigger, and add', copy: 'Pick a market, find an asset, then set the price or percentage move that matters to you.' },
+    { target: '[data-tour="tabs"]', label: 'Stay organized', title: 'Everything is one tap away', copy: 'Review live prices and triggered alerts from the two main views. Notification channels are available from Profile.' },
+    user.guest
+      ? { target: '[data-tour="account"]', label: 'Guest mode', title: 'Save this watchlist when you are ready', copy: 'Claiming keeps everything you add and lets you sign in from another device.' }
+      : { target: '[data-tour="profile"]', label: 'Your profile', title: 'Manage notifications from Profile', copy: 'Open Profile anytime to manage browser alerts, email delivery, passkeys, and your session.' },
+  ], [user.guest])
+  const [index, setIndex] = useState(0)
+  const [position, setPosition] = useState(null)
+  const panel = useRef(null)
+
+  const moveTo = (nextIndex) => {
+    setPosition(null)
+    setIndex(nextIndex)
+  }
+
+  useLayoutEffect(() => {
+    const target = document.querySelector(steps[index].target)
+    if (!target) return undefined
+    target.classList.add('tour-focus')
+
+    const place = () => {
+      const viewportPadding = 12
+      const targetGap = 14
+      let targetRect = target.getBoundingClientRect()
+      if (targetRect.bottom < viewportPadding || targetRect.top > window.innerHeight - viewportPadding) {
+        target.scrollIntoView({ block: 'center', behavior: 'auto' })
+        targetRect = target.getBoundingClientRect()
+      }
+
+      const panelElement = panel.current
+      const panelRect = panelElement?.getBoundingClientRect()
+      const width = panelRect?.width || Math.min(360, window.innerWidth - viewportPadding * 2)
+      const naturalHeight = panelElement?.scrollHeight || panelRect?.height || 210
+      const centeredLeft = Math.max(viewportPadding, Math.min(window.innerWidth - width - viewportPadding,
+        targetRect.left + targetRect.width / 2 - width / 2))
+      const belowSpace = window.innerHeight - viewportPadding - targetRect.bottom - targetGap
+      const aboveSpace = targetRect.top - targetGap - viewportPadding
+
+      if (belowSpace >= naturalHeight) {
+        setPosition({ top: targetRect.bottom + targetGap, left: centeredLeft, maxHeight: naturalHeight })
+        return
+      }
+      if (aboveSpace >= naturalHeight) {
+        setPosition({ top: targetRect.top - targetGap - naturalHeight, left: centeredLeft, maxHeight: naturalHeight })
+        return
+      }
+
+      const rightSpace = window.innerWidth - viewportPadding - targetRect.right - targetGap
+      const leftSpace = targetRect.left - targetGap - viewportPadding
+      const availableHeight = window.innerHeight - viewportPadding * 2
+      const sideTop = Math.max(viewportPadding, Math.min(window.innerHeight - Math.min(naturalHeight, availableHeight) - viewportPadding,
+        targetRect.top + targetRect.height / 2 - naturalHeight / 2))
+      if (rightSpace >= width) {
+        setPosition({ top: sideTop, left: targetRect.right + targetGap, maxHeight: availableHeight })
+        return
+      }
+      if (leftSpace >= width) {
+        setPosition({ top: sideTop, left: targetRect.left - targetGap - width, maxHeight: availableHeight })
+        return
+      }
+
+      const placeBelow = belowSpace >= aboveSpace
+      const maxHeight = Math.max(0, placeBelow ? belowSpace : aboveSpace)
+      setPosition({
+        top: placeBelow ? targetRect.bottom + targetGap : viewportPadding,
+        left: centeredLeft,
+        maxHeight,
+      })
+    }
+
+    place()
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
+    return () => {
+      target.classList.remove('tour-focus')
+      window.removeEventListener('resize', place)
+      window.removeEventListener('scroll', place, true)
+    }
+  }, [index, steps])
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') onClose()
+      if (event.key === 'ArrowRight' && index < steps.length - 1) moveTo(index + 1)
+      if (event.key === 'ArrowLeft' && index > 0) moveTo(index - 1)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [index, onClose, steps.length])
+
+  const step = steps[index]
+  return (
+    <motion.div className="tour-layer" role="presentation" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+      <div className="tour-shade" />
+      <motion.section ref={panel} className="tour-popover" style={position || { top: 0, left: 0, visibility: 'hidden' }} role="dialog" aria-modal="true" aria-labelledby="tour-title" data-lenis-prevent initial={{ opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 380, damping: 30 }}>
+        <div className="tour-topline"><span>{step.label}</span><button type="button" onClick={onClose}>Skip tour</button></div>
+        <h2 id="tour-title">{step.title}</h2>
+        <p>{step.copy}</p>
+        <div className="tour-footer"><div className="tour-progress" aria-label={`Step ${index + 1} of ${steps.length}`}>{steps.map((_, itemIndex) => <i key={itemIndex} className={itemIndex === index ? 'active' : ''} />)}</div><div className="tour-actions">{index > 0 && <button className="tour-back" type="button" onClick={() => moveTo(index - 1)}>Back</button>}<button className="tour-next" type="button" onClick={() => index === steps.length - 1 ? onClose() : moveTo(index + 1)}>{index === steps.length - 1 ? 'Done' : 'Next'}{index < steps.length - 1 && <ArrowRight size={16} />}</button></div></div>
+      </motion.section>
+    </motion.div>
   )
 }
 
@@ -678,7 +926,7 @@ function NotificationSettings({ user, notificationOn, onTogglePush }) {
       {loading ? <div className="hint">Loading channels...</div> : channels.map((channel) => (
         <NotificationChannelCard key={channel.channel} channel={channel} user={user} onUpdate={update} onTogglePush={onTogglePush} notificationOn={notificationOn} />
       ))}
-      <PasskeySettings />
+      {!user.guest && <PasskeySettings />}
     </section>
   )
 }
@@ -749,7 +997,7 @@ function NotificationChannelCard({ channel, user, onUpdate, onTogglePush, notifi
   const label = { WEB_PUSH: 'Mobile / browser', EMAIL: 'Email', TELEGRAM: 'Telegram', DISCORD: 'Discord' }[channel.channel]
   const description = {
     WEB_PUSH: 'Instant notifications on your phone or desktop browser.',
-    EMAIL: `Alerts will be sent to ${user.email}.`,
+    EMAIL: user.guest ? 'Claim your account to receive alerts by email.' : `Alerts will be sent to ${user.email}.`,
     TELEGRAM: 'Enter the chat ID after starting the configured Telegram bot.',
     DISCORD: 'Paste an HTTPS incoming webhook URL for your Discord channel.',
   }[channel.channel]
@@ -903,7 +1151,7 @@ function AddForm({ onAdded }) {
 
   return (
     <form className="card add-form" onSubmit={submit}>
-      <h2>Add watch item</h2>
+      <h2 data-tour="add">Add watch item</h2>
       <div className="searchbox">
         <select className="market-select" value={market} onChange={(e) => {
           quoteRequestId.current += 1
@@ -945,7 +1193,7 @@ function AddForm({ onAdded }) {
                autoComplete="off" />
         </div>
         {open && (searching || suggestions.length > 0 || searchMessage) && (
-          <ul className="suggest" onMouseDown={(e) => e.preventDefault()}>
+          <ul className="suggest" data-lenis-prevent onMouseDown={(e) => e.preventDefault()}>
             {searching && <li className="suggest-status">Searching {market === 'CRYPTO' ? 'coins' : 'stocks'}...</li>}
             {!searching && suggestions.map((s, i) => (
               <li key={`${s.symbol}-${i}`} onMouseDown={() => pick(s)}>
@@ -992,11 +1240,13 @@ function WatchList({ items, onDelete, onToggle }) {
     return <p className="empty">Nothing watched yet. Search a coin or stock above — you'll be alerted the moment it drops.</p>
   }
   return (
-    <ul className="watch-list">
-      {items.map((item) => (
-        <WatchCard key={item.id} item={item} onDelete={onDelete} onToggle={onToggle} />
-      ))}
-    </ul>
+    <motion.ul className="watch-list" initial="hidden" animate="visible" variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.06 } } }}>
+      <AnimatePresence initial={false}>
+        {items.map((item) => (
+          <WatchCard key={item.id} item={item} onDelete={onDelete} onToggle={onToggle} />
+        ))}
+      </AnimatePresence>
+    </motion.ul>
   )
 }
 
@@ -1011,7 +1261,7 @@ function WatchCard({ item, onDelete, onToggle }) {
     ? ((item.lastPrice - item.previousPrice) / item.previousPrice) * 100
     : null
   return (
-    <li className={`card watch-card ${!item.active ? 'paused' : ''}`}>
+    <motion.li className={`card watch-card ${!item.active ? 'paused' : ''}`} variants={{ hidden: { opacity: 0, y: 12 }, visible: { opacity: 1, y: 0, transition: { duration: 0.28, ease: 'easeOut' } } }} exit={{ opacity: 0, scale: 0.97 }} layout>
       <button className="card-main" onClick={() => setExpanded((v) => !v)}>
         <div className="item-top">
           <AssetLogo market={item.market} symbol={item.symbol} className="watch-market-icon" />
@@ -1044,7 +1294,7 @@ function WatchCard({ item, onDelete, onToggle }) {
           {!item.active && item.lastAlertedAt && <span className="tag tag-warn">triggered · paused</span>}
         </div>
       </button>
-      {expanded && <ChartPanel item={item} />}
+      <AnimatePresence initial={false}>{expanded && <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.24, ease: 'easeOut' }}><ChartPanel item={item} /></motion.div>}</AnimatePresence>
       <div className="item-actions">
         <label className="switch">
           <input type="checkbox" checked={item.active} onChange={(e) => onToggle(item, e.target.checked)} />
@@ -1053,7 +1303,7 @@ function WatchCard({ item, onDelete, onToggle }) {
         </label>
         <button className="ghost danger" onClick={() => onDelete(item.id)}>Remove</button>
       </div>
-    </li>
+    </motion.li>
   )
 }
 
@@ -1151,9 +1401,9 @@ function AlertList({ alerts, onDelete, onClearAll }) {
         <span className="muted-sm">{alerts.length} alert{alerts.length === 1 ? '' : 's'}</span>
         <button className="ghost" onClick={onClearAll}>Clear all</button>
       </div>
-      <ul className="alert-list">
-        {alerts.map((a) => (
-          <li key={a.id} className="card alert-item">
+      <motion.ul className="alert-list" initial="hidden" animate="visible" variants={{ hidden: {}, visible: { transition: { staggerChildren: 0.06 } } }}>
+        <AnimatePresence initial={false}>{alerts.map((a) => (
+          <motion.li key={a.id} className="card alert-item" variants={{ hidden: { opacity: 0, x: -10 }, visible: { opacity: 1, x: 0 } }} exit={{ opacity: 0, x: 12 }} layout>
             <div className="alert-top">
               <AssetLogo market={a.market} symbol={a.symbol} className="alert-logo" />
               <span className="badge">{a.market}</span>
@@ -1162,9 +1412,9 @@ function AlertList({ alerts, onDelete, onClearAll }) {
             </div>
             <p>{a.message}</p>
             <time>{fmtTime(a.createdAt)}</time>
-          </li>
-        ))}
-      </ul>
+          </motion.li>
+        ))}</AnimatePresence>
+      </motion.ul>
     </>
   )
 }
