@@ -81,13 +81,15 @@ public class NotificationPreferenceService {
     private ChannelView view(UserAccount user, NotificationChannel channel,
                              NotificationPreference preference) {
         NotificationSender sender = senders.get(channel);
-        boolean available = sender != null && sender.available();
+        boolean guestEmail = user.isGuest() && channel == NotificationChannel.EMAIL;
+        boolean available = sender != null && sender.available() && !guestEmail;
         String destination = preference == null ? "" : safeDestination(channel, preference.getDestination());
-        if (channel == NotificationChannel.EMAIL) destination = user.getEmail();
+        if (channel == NotificationChannel.EMAIL) destination = user.isGuest() ? "" : user.getEmail();
         boolean configured = preference != null && preference.getDestination() != null
                 && !preference.getDestination().isBlank();
         return new ChannelView(channel, preference != null && preference.isEnabled(), available,
-                destination, configured, sender == null ? "Channel not installed" : sender.availabilityMessage());
+                destination, configured, guestEmail ? "Claim your account to enable email alerts"
+                        : sender == null ? "Channel not installed" : sender.availabilityMessage());
     }
 
     private static NotificationPreference newPreference(String userId, NotificationChannel channel) {
@@ -99,6 +101,9 @@ public class NotificationPreferenceService {
 
     private static String destination(UserAccount user, NotificationChannel channel, String requested,
                                       String existing, boolean enabled) {
+        if (user.isGuest() && channel == NotificationChannel.EMAIL) {
+            throw new IllegalArgumentException("Claim your account to enable email alerts");
+        }
         if (channel == NotificationChannel.EMAIL) return user.getEmail();
         String value = requested == null ? "" : requested.trim();
         if (!enabled && value.isBlank()) return existing;

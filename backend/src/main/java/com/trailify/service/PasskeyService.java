@@ -97,6 +97,9 @@ public class PasskeyService {
 
     @Transactional
     public Map<String, Object> registrationOptions(UserAccount user) {
+        if (user.isGuest()) {
+            throw new IllegalArgumentException("Claim your account before adding a passkey");
+        }
         Challenge created = createChallenge(user.getId(), PasskeyChallenge.Purpose.REGISTER);
         Map<String, Object> publicKey = new LinkedHashMap<>();
         publicKey.put("challenge", created.raw());

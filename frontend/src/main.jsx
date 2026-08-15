@@ -1,11 +1,15 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
+import ExperienceProvider from './ExperienceProvider.jsx'
 import './index.css'
+import 'lenis/dist/lenis.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
+    <ExperienceProvider>
+      <App />
+    </ExperienceProvider>
   </React.StrictMode>,
 )
 
